@@ -12,7 +12,8 @@ export async function GET() {
       hasPrivateKey: !!privateKey,
       privateKeyLength: privateKey?.length || 0,
       privateKeyStart: privateKey ? privateKey.substring(0, 50) + "..." : "Not found",
-      privateKeyHasNewlines: privateKey ? privateKey.includes("\\n") : false,
+      privateKeyHasNewlines: privateKey ? privateKey.includes("\n") : false,
+      privateKeyHasBackslashN: privateKey ? privateKey.includes("\\n") : false,
     })
   } catch (error) {
     return NextResponse.json({ error: "Debug failed", details: error }, { status: 500 })
