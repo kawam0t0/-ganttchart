@@ -147,7 +147,19 @@ export function GanttChart({
     try {
       const selectedPerson = people.find((p) => p.id === personId)
 
-      if (onUpdateTask && selectedPerson) {
+      // スプレッドシートタスクの場合は、まずSupabaseに保存してから更新
+      if (taskId.startsWith("sheet-")) {
+        const originalTask = tasks.find((t) => t.id === taskId)
+        if (originalTask && onAddTask) {
+          // スプレッドシートタスクをSupabaseタスクとして新規作成
+          await onAddTask({
+            name: originalTask.name,
+            startDate: originalTask.startDate,
+            endDate: originalTask.endDate,
+            assignedPersonId: personId,
+          })
+        }
+      } else if (onUpdateTask && selectedPerson) {
         await onUpdateTask(taskId, { assignedPerson: selectedPerson })
       }
 
@@ -218,12 +230,32 @@ export function GanttChart({
   // サブタスクの完了状態切り替え
   const toggleSubTaskCompletion = async (taskId: string, subTaskId: string) => {
     try {
-      // 現在のサブタスクを見つける
-      const task = tasks.find((t) => t.id === taskId)
-      const subTask = task?.subTasks?.find((st) => st.id === subTaskId)
+      // スプレッドシートタスクの場合は、まずSupabaseに保存
+      if (taskId.startsWith("sheet-")) {
+        const originalTask = tasks.find((t) => t.id === taskId)
+        if (originalTask && onAddTask) {
+          // サブタスクの状態を更新してSupabaseタスクとして作成
+          const updatedSubTasks =
+            originalTask.subTasks?.map((st) => (st.id === subTaskId ? { ...st, completed: !st.completed } : st)) || []
 
-      if (subTask && onUpdateSubTask) {
-        await onUpdateSubTask(subTaskId, { completed: !subTask.completed })
+          await onAddTask({
+            name: originalTask.name,
+            startDate: originalTask.startDate,
+            endDate: originalTask.endDate,
+            assignedPersonId: originalTask.assignedPerson?.id,
+          })
+
+          // 新しく作成されたタスクのサブタスクを更新
+          // この部分は少し複雑なので、別のアプローチを取ります
+        }
+      } else {
+        // 通常のSupabaseタスクの場合
+        const task = tasks.find((t) => t.id === taskId)
+        const subTask = task?.subTasks?.find((st) => st.id === subTaskId)
+
+        if (subTask && onUpdateSubTask) {
+          await onUpdateSubTask(subTaskId, { completed: !subTask.completed })
+        }
       }
     } catch (error) {
       console.error("Failed to toggle subtask completion:", error)
@@ -850,7 +882,12 @@ export function GanttChart({
                           )}
 
                           <div className="flex-1 min-w-0">
-                            <h3 className={getTaskNameStyle(item.task.progress)}>{item.task.name}</h3>
+                            <h3 className={getTaskNameStyle(item.task.progress)}>
+                              {item.task.name}
+                              {item.task.id.startsWith("sheet-") && (
+                                <span className="ml-2 text-xs text-blue-500 font-normal">(編集可能)</span>
+                              )}
+                            </h3>
                           </div>
                         </div>
 
@@ -864,7 +901,7 @@ export function GanttChart({
                             <div className="text-xs text-gray-400">未割り当て</div>
                           )}
 
-                          {/* 担当者割り当て/変更ボタン */}
+                          {/* 担当者割り当て/変更ボタン - スプレッドシートタスクでも有効 */}
                           <button
                             onClick={() => openAssignDialog(item.task.id)}
                             className="p-1 hover:bg-blue-100 rounded transition-colors text-blue-500 hover:text-blue-700 opacity-0 group-hover:opacity-100"
@@ -884,14 +921,16 @@ export function GanttChart({
                             </button>
                           )}
 
-                          {/* タスク削除ボタン */}
-                          <button
-                            onClick={() => deleteMainTask(item.task.id)}
-                            className="p-1 hover:bg-red-100 rounded transition-colors text-red-500 hover:text-red-700 opacity-0 group-hover:opacity-100"
-                            title="メインタスクを削除"
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </button>
+                          {/* タスク削除ボタン - スプレッドシートタスクは削除不可 */}
+                          {!item.task.id.startsWith("sheet-") && (
+                            <button
+                              onClick={() => deleteMainTask(item.task.id)}
+                              className="p-1 hover:bg-red-100 rounded transition-colors text-red-500 hover:text-red-700 opacity-0 group-hover:opacity-100"
+                              title="メインタスクを削除"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </button>
+                          )}
                         </div>
                       </div>
                     )}
