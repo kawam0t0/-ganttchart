@@ -23,6 +23,8 @@ import {
   UserPlus,
   Users,
   EyeOff,
+  Eye,
+  Settings,
 } from "lucide-react"
 import type { Person, Task } from "@/lib/types"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
@@ -85,7 +87,9 @@ export function GanttChart({
   onDeleteSubTask,
 }: GanttChartProps) {
   const [tasks, setTasks] = useState<Task[]>(initialTasks)
+  const [hiddenTasks, setHiddenTasks] = useState<Task[]>([]) // 非表示タスクの管理
   const [isAddingMainTask, setIsAddingMainTask] = useState(false)
+  const [isHiddenTasksDialogOpen, setIsHiddenTasksDialogOpen] = useState(false)
   const [newMainTask, setNewMainTask] = useState({
     name: "",
     startDate: "",
@@ -117,6 +121,13 @@ export function GanttChart({
   const monthHeaderScrollRef = useRef<HTMLDivElement>(null)
   const dateHeaderScrollRef = useRef<HTMLDivElement>(null)
   const contentScrollRef = useRef<HTMLDivElement>(null)
+  const taskNameScrollRef = useRef<HTMLDivElement>(null) // タスク名エリアのスクロール参照を追加
+
+  // スクロール位置を保存するための参照
+  const scrollPositionRef = useRef({
+    horizontal: 0,
+    vertical: 0,
+  })
 
   // OPEN日から4ヶ月前を開始日として設定
   const openDate = project.openDate || new Date(2024, 3, 1)
@@ -132,8 +143,33 @@ export function GanttChart({
     dateRange.push(new Date(d))
   }
 
+  // スクロール位置を保存する関数
+  const saveScrollPosition = () => {
+    if (contentScrollRef.current && taskNameScrollRef.current) {
+      scrollPositionRef.current = {
+        horizontal: contentScrollRef.current.scrollLeft,
+        vertical: taskNameScrollRef.current.scrollTop,
+      }
+    }
+  }
+
+  // スクロール位置を復元する関数
+  const restoreScrollPosition = () => {
+    requestAnimationFrame(() => {
+      if (contentScrollRef.current && taskNameScrollRef.current) {
+        contentScrollRef.current.scrollLeft = scrollPositionRef.current.horizontal
+        taskNameScrollRef.current.scrollTop = scrollPositionRef.current.vertical
+
+        // 他のスクロール要素も同期
+        syncScrolls(scrollPositionRef.current.horizontal)
+      }
+    })
+  }
+
   // タスクバーのクリックハンドラー
   const handleTaskBarClick = (taskId: string) => {
+    saveScrollPosition() // スクロール位置を保存
+
     const newExpandedTasks = new Set(expandedTasks)
     if (expandedTasks.has(taskId)) {
       newExpandedTasks.delete(taskId)
@@ -141,11 +177,18 @@ export function GanttChart({
       newExpandedTasks.add(taskId)
     }
     setExpandedTasks(newExpandedTasks)
+
+    // 状態更新後にスクロール位置を復元
+    setTimeout(() => {
+      restoreScrollPosition()
+    }, 50)
   }
 
   // 担当者を割り当てる関数
   const assignPersonToTask = async (taskId: string, personId: string) => {
     try {
+      saveScrollPosition() // スクロール位置を保存
+
       const selectedPerson = people.find((p) => p.id === personId)
 
       // スプレッドシートタスクの場合は、まずSupabaseに保存してから更新
@@ -187,6 +230,11 @@ export function GanttChart({
 
       setIsAssignDialogOpen(false)
       setAssigningTaskId(null)
+
+      // 更新後にスクロール位置を復元
+      setTimeout(() => {
+        restoreScrollPosition()
+      }, 100)
     } catch (error) {
       console.error("Failed to assign person to task:", error)
     }
@@ -214,6 +262,8 @@ export function GanttChart({
     if (!newMainTask.name.trim() || !newMainTask.startDate || !newMainTask.endDate || !onAddTask) return
 
     try {
+      saveScrollPosition() // スクロール位置を保存
+
       await onAddTask({
         name: newMainTask.name.trim(),
         startDate: new Date(newMainTask.startDate),
@@ -228,6 +278,11 @@ export function GanttChart({
         assignedPersonId: "",
       })
       setIsAddingMainTask(false)
+
+      // 更新後にスクロール位置を復元
+      setTimeout(() => {
+        restoreScrollPosition()
+      }, 100)
     } catch (error) {
       console.error("Failed to add main task:", error)
     }
@@ -252,6 +307,8 @@ export function GanttChart({
   // サブタスクの完了状態切り替え
   const toggleSubTaskCompletion = async (taskId: string, subTaskId: string) => {
     try {
+      saveScrollPosition() // スクロール位置を保存
+
       // スプレッドシートタスクの場合は、まずSupabaseに保存してからサブタスクを更新
       if (taskId.startsWith("sheet-")) {
         const originalTask = tasks.find((t) => t.id === taskId)
@@ -308,6 +365,11 @@ export function GanttChart({
           }
         }
       }
+
+      // 更新後にスクロール位置を復元
+      setTimeout(() => {
+        restoreScrollPosition()
+      }, 150)
     } catch (error) {
       console.error("Failed to toggle subtask completion:", error)
     }
@@ -318,8 +380,15 @@ export function GanttChart({
     if (!newSubTaskName.trim() || !onAddSubTask) return
 
     try {
+      saveScrollPosition() // スクロール位置を保存
+
       await onAddSubTask(taskId, newSubTaskName.trim())
       setNewSubTaskName("")
+
+      // 更新後にスクロール位置を復元
+      setTimeout(() => {
+        restoreScrollPosition()
+      }, 100)
     } catch (error) {
       console.error("Failed to add subtask:", error)
     }
@@ -328,9 +397,16 @@ export function GanttChart({
   // サブタスクの削除
   const deleteSubTask = async (taskId: string, subTaskId: string) => {
     try {
+      saveScrollPosition() // スクロール位置を保存
+
       if (onDeleteSubTask) {
         await onDeleteSubTask(subTaskId)
       }
+
+      // 更新後にスクロール位置を復元
+      setTimeout(() => {
+        restoreScrollPosition()
+      }, 100)
     } catch (error) {
       console.error("Failed to delete subtask:", error)
     }
@@ -341,9 +417,16 @@ export function GanttChart({
     if (!newName.trim() || !onUpdateSubTask) return
 
     try {
+      saveScrollPosition() // スクロール位置を保存
+
       await onUpdateSubTask(subTaskId, { name: newName.trim() })
       setEditingSubTask(null)
       setEditSubTaskName("")
+
+      // 更新後にスクロール位置を復元
+      setTimeout(() => {
+        restoreScrollPosition()
+      }, 100)
     } catch (error) {
       console.error("Failed to update subtask name:", error)
     }
@@ -589,7 +672,13 @@ export function GanttChart({
   // メインタスクの非表示（削除の代わり）
   const hideMainTask = async (taskId: string) => {
     try {
-      // ローカル状態から非表示にする
+      const taskToHide = tasks.find((task) => task.id === taskId)
+      if (!taskToHide) return
+
+      // 非表示タスクリストに追加
+      setHiddenTasks((prev) => [...prev, taskToHide])
+
+      // 表示中のタスクから削除
       setTasks((prevTasks) => prevTasks.filter((task) => task.id !== taskId))
 
       // 展開状態もクリア
@@ -597,10 +686,27 @@ export function GanttChart({
       newExpandedTasks.delete(taskId)
       setExpandedTasks(newExpandedTasks)
 
-      // 実際のデータベースからは削除せず、ローカルでのみ非表示
       console.log(`Task ${taskId} hidden locally`)
     } catch (error) {
       console.error("Failed to hide main task:", error)
+    }
+  }
+
+  // タスクを再表示する関数
+  const showTask = (taskId: string) => {
+    try {
+      const taskToShow = hiddenTasks.find((task) => task.id === taskId)
+      if (!taskToShow) return
+
+      // 表示中のタスクに追加
+      setTasks((prevTasks) => [...prevTasks, taskToShow])
+
+      // 非表示タスクリストから削除
+      setHiddenTasks((prev) => prev.filter((task) => task.id !== taskId))
+
+      console.log(`Task ${taskId} restored`)
+    } catch (error) {
+      console.error("Failed to show task:", error)
     }
   }
 
@@ -641,6 +747,62 @@ export function GanttChart({
             )}
           </div>
           <div className="flex items-center gap-2">
+            {/* 非表示タスク管理ボタンを追加 */}
+            {hiddenTasks.length > 0 && (
+              <Dialog open={isHiddenTasksDialogOpen} onOpenChange={setIsHiddenTasksDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="bg-white/70 backdrop-blur-md border-orange-300/50 text-orange-600 hover:bg-orange-50/50 rounded-xl"
+                  >
+                    <EyeOff className="h-4 w-4 mr-1" />
+                    非表示 ({hiddenTasks.length})
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-lg bg-white/95 backdrop-blur-md border-0 shadow-2xl">
+                  <DialogHeader className="pb-6">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center">
+                        <Settings className="h-6 w-6 text-orange-600" />
+                      </div>
+                      <div>
+                        <DialogTitle className="text-xl font-semibold text-gray-900">非表示タスク管理</DialogTitle>
+                        <p className="text-sm text-gray-500 mt-1">非表示にしたタスクを再表示できます</p>
+                      </div>
+                    </div>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div className="space-y-2 max-h-64 overflow-y-auto">
+                      {hiddenTasks.map((task) => (
+                        <div
+                          key={task.id}
+                          className="flex items-center justify-between p-3 bg-gray-50/70 backdrop-blur-sm border border-gray-200/50 rounded-xl"
+                        >
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-medium text-gray-800 truncate">{task.name}</h3>
+                            {task.assignedPerson && (
+                              <p className="text-xs text-gray-500">
+                                担当: {task.assignedPerson.firstName} {task.assignedPerson.lastName}
+                              </p>
+                            )}
+                          </div>
+                          <Button
+                            size="sm"
+                            onClick={() => showTask(task.id)}
+                            className="flex-shrink-0 bg-green-600 hover:bg-green-700 text-white"
+                          >
+                            <Eye className="h-3 w-3 mr-1" />
+                            再表示
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            )}
+
             {onRefresh && (
               <Button
                 onClick={onRefresh}
@@ -816,6 +978,9 @@ export function GanttChart({
               <Calendar className="h-12 w-12 text-gray-400 mx-auto mb-4" />
               <p className="text-gray-600 mb-2">このカテゴリーにはタスクがありません</p>
               <p className="text-sm text-gray-500">「メインタスクを追加」ボタンからタスクを作成してください</p>
+              {hiddenTasks.length > 0 && (
+                <p className="text-sm text-orange-600 mt-2">{hiddenTasks.length}個の非表示タスクがあります</p>
+              )}
             </div>
           </div>
         )}
@@ -906,6 +1071,7 @@ export function GanttChart({
             <div className="flex-1 flex overflow-hidden">
               {/* Fixed Task Names Column */}
               <div
+                ref={taskNameScrollRef}
                 className="bg-white/70 backdrop-blur-md border-r border-gray-300 flex-shrink-0 overflow-y-auto"
                 style={{ width: `${taskNameColumnWidth}px` }}
               >
@@ -937,23 +1103,11 @@ export function GanttChart({
                             </button>
                           )}
 
-                          {/* 担当者アイコンまたは未割り当て表示 - 色変化する丸を削除 */}
-                          {/* 以下の部分を削除
-                          {item.task.assignedPerson ? (
-                            <div
-                              className={`w-3 h-3 rounded-full ${item.task.assignedPerson.bgColor} border border-blue-300 flex-shrink-0`}
-                            ></div>
-                          ) : (
-                            <div className="w-3 h-3 rounded-full bg-gray-400 border border-gray-300 flex-shrink-0"></div>
-                          )}
-                          */}
-
                           <div className="flex-1 min-w-0">
                             <h3 className={getTaskNameStyle(item.task.progress)}>{item.task.name}</h3>
                           </div>
                         </div>
 
-                        {/* ボタン部分を修正（担当者削除ボタンを削除し、ゴミ箱アイコンを非表示アイコンに変更）： */}
                         <div className="flex items-center gap-2">
                           {/* 担当者名または未割り当て表示 */}
                           {item.task.assignedPerson ? (
@@ -972,8 +1126,6 @@ export function GanttChart({
                           >
                             <UserPlus className="h-3 w-3" />
                           </button>
-
-                          {/* 担当者削除ボタンを削除 */}
 
                           {/* タスク非表示ボタン - アイコンをEyeOffに変更 */}
                           {!item.task.id.startsWith("sheet-") && (
@@ -1302,7 +1454,6 @@ export function GanttChart({
                   <UserPlus className="h-3 w-3" />
                   担当者を割り当て
                 </button>
-                {/* コンテキストメニューからも削除を非表示に変更： */}
                 <button
                   className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 text-gray-600 flex items-center gap-2 transition-colors"
                   onClick={() => {
