@@ -39,31 +39,40 @@ export function OthersGantt({ project, people, onBack }: OthersGanttProps) {
 
   // データを統合
   useEffect(() => {
+    console.log("🔄 OthersGantt: Combining tasks...")
+    console.log("📊 Supabase tasks:", supabaseTasks)
+    console.log("📊 Sheet tasks for その他:", sheetTasks["その他"])
+
     const categorySheetTasks = sheetTasks["その他"] || []
 
-    // スプレッドシートタスクとSupabaseタスクを統合
-    const combined = [...categorySheetTasks, ...supabaseTasks]
+    // 空のタスクを除外（その他カテゴリーには空のタスクが多い）
+    const filteredSheetTasks = categorySheetTasks.filter((task) => task.name && task.name.trim() !== "")
 
-    // 重複を除去（同じ名前のタスクがある場合はSupabaseを優先）
-    const uniqueTasks = combined.reduce((acc: Task[], current) => {
-      const existingIndex = acc.findIndex((task) => task.name === current.name)
-      if (existingIndex >= 0) {
-        // Supabaseタスク（IDがsheet-で始まらない）を優先
-        if (!current.id.startsWith("sheet-")) {
-          acc[existingIndex] = current
-        }
-      } else {
-        acc.push(current)
-      }
-      return acc
-    }, [])
+    // 重複チェック: 同じ名前のタスクがある場合はSupabaseを優先
+    const supabaseTaskNames = new Set(supabaseTasks.map((task) => task.name))
+    const finalFilteredSheetTasks = filteredSheetTasks.filter((task) => !supabaseTaskNames.has(task.name))
 
-    setCombinedTasks(uniqueTasks)
+    // スプレッドシートタスクを先に、Supabaseタスクを後に配置
+    const combined = [...finalFilteredSheetTasks, ...supabaseTasks]
+
+    console.log(`✅ OthersGantt: Combined ${combined.length} tasks`)
+    console.log(
+      "📋 Final task list:",
+      combined.map((t) => ({ name: t.name, id: t.id, subTaskCount: t.subTasks?.length || 0 })),
+    )
+
+    setCombinedTasks(combined)
     setIsLoading(supabaseLoading || sheetLoading)
   }, [supabaseTasks, sheetTasks, supabaseLoading, sheetLoading])
 
   const handleRefresh = async () => {
+    console.log("🔄 OthersGantt: Refreshing data...")
     await Promise.all([refetchSupabase(), refetchSheet()])
+  }
+
+  // エラー表示
+  if (sheetError) {
+    console.error("❌ OthersGantt: Sheet error:", sheetError)
   }
 
   return (

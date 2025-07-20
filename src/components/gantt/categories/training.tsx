@@ -39,31 +39,37 @@ export function TrainingGantt({ project, people, onBack }: TrainingGanttProps) {
 
   // データを統合
   useEffect(() => {
+    console.log("🔄 TrainingGantt: Combining tasks...")
+    console.log("📊 Supabase tasks:", supabaseTasks)
+    console.log("📊 Sheet tasks for 研修系:", sheetTasks["研修系"])
+
     const categorySheetTasks = sheetTasks["研修系"] || []
 
-    // スプレッドシートタスクとSupabaseタスクを統合
-    const combined = [...categorySheetTasks, ...supabaseTasks]
+    // 重複チェック: 同じ名前のタスクがある場合はSupabaseを優先
+    const supabaseTaskNames = new Set(supabaseTasks.map((task) => task.name))
+    const filteredSheetTasks = categorySheetTasks.filter((task) => !supabaseTaskNames.has(task.name))
 
-    // 重複を除去（同じ名前のタスクがある場合はSupabaseを優先）
-    const uniqueTasks = combined.reduce((acc: Task[], current) => {
-      const existingIndex = acc.findIndex((task) => task.name === current.name)
-      if (existingIndex >= 0) {
-        // Supabaseタスク（IDがsheet-で始まらない）を優先
-        if (!current.id.startsWith("sheet-")) {
-          acc[existingIndex] = current
-        }
-      } else {
-        acc.push(current)
-      }
-      return acc
-    }, [])
+    // スプレッドシートタスクを先に、Supabaseタスクを後に配置
+    const combined = [...filteredSheetTasks, ...supabaseTasks]
 
-    setCombinedTasks(uniqueTasks)
+    console.log(`✅ TrainingGantt: Combined ${combined.length} tasks`)
+    console.log(
+      "📋 Final task list:",
+      combined.map((t) => ({ name: t.name, id: t.id, subTaskCount: t.subTasks?.length || 0 })),
+    )
+
+    setCombinedTasks(combined)
     setIsLoading(supabaseLoading || sheetLoading)
   }, [supabaseTasks, sheetTasks, supabaseLoading, sheetLoading])
 
   const handleRefresh = async () => {
+    console.log("🔄 TrainingGantt: Refreshing data...")
     await Promise.all([refetchSupabase(), refetchSheet()])
+  }
+
+  // エラー表示
+  if (sheetError) {
+    console.error("❌ TrainingGantt: Sheet error:", sheetError)
   }
 
   return (

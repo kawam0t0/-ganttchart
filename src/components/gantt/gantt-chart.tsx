@@ -151,13 +151,34 @@ export function GanttChart({
       if (taskId.startsWith("sheet-")) {
         const originalTask = tasks.find((t) => t.id === taskId)
         if (originalTask && onAddTask) {
+          // 進捗率を計算
+          const completedCount = originalTask.subTasks?.filter((st) => st.completed).length || 0
+          const progress = originalTask.subTasks?.length
+            ? Math.round((completedCount / originalTask.subTasks.length) * 100)
+            : 0
+
           // スプレッドシートタスクをSupabaseタスクとして新規作成
-          await onAddTask({
+          const newTask = await onAddTask({
             name: originalTask.name,
             startDate: originalTask.startDate,
             endDate: originalTask.endDate,
             assignedPersonId: personId,
           })
+
+          // サブタスクを移行
+          if (newTask && originalTask.subTasks && onAddSubTask) {
+            for (const subTask of originalTask.subTasks) {
+              const createdSubTask = await onAddSubTask(newTask.id, subTask.name)
+              if (createdSubTask && subTask.completed && onUpdateSubTask) {
+                await onUpdateSubTask(createdSubTask.id, { completed: true })
+              }
+            }
+          }
+
+          // 進捗率を更新
+          if (newTask && onUpdateTask) {
+            await onUpdateTask(newTask.id, { progress })
+          }
         }
       } else if (onUpdateTask && selectedPerson) {
         await onUpdateTask(taskId, { assignedPerson: selectedPerson })
@@ -230,23 +251,40 @@ export function GanttChart({
   // サブタスクの完了状態切り替え
   const toggleSubTaskCompletion = async (taskId: string, subTaskId: string) => {
     try {
-      // スプレッドシートタスクの場合は、まずSupabaseに保存
+      // スプレッドシートタスクの場合は、まずSupabaseに保存してからサブタスクを更新
       if (taskId.startsWith("sheet-")) {
         const originalTask = tasks.find((t) => t.id === taskId)
         if (originalTask && onAddTask) {
-          // サブタスクの状態を更新してSupabaseタスクとして作成
+          // サブタスクの状態を更新
           const updatedSubTasks =
             originalTask.subTasks?.map((st) => (st.id === subTaskId ? { ...st, completed: !st.completed } : st)) || []
 
-          await onAddTask({
+          // 進捗率を計算
+          const completedCount = updatedSubTasks.filter((st) => st.completed).length
+          const progress = updatedSubTasks.length > 0 ? Math.round((completedCount / updatedSubTasks.length) * 100) : 0
+
+          // 新しいSupabaseタスクを作成
+          const newTask = await onAddTask({
             name: originalTask.name,
             startDate: originalTask.startDate,
             endDate: originalTask.endDate,
             assignedPersonId: originalTask.assignedPerson?.id,
           })
 
-          // 新しく作成されたタスクのサブタスクを更新
-          // この部分は少し複雑なので、別のアプローチを取ります
+          // 新しく作成されたタスクにサブタスクを追加
+          if (newTask && onAddSubTask) {
+            for (const subTask of updatedSubTasks) {
+              const createdSubTask = await onAddSubTask(newTask.id, subTask.name)
+              if (createdSubTask && subTask.completed && onUpdateSubTask) {
+                await onUpdateSubTask(createdSubTask.id, { completed: true })
+              }
+            }
+          }
+
+          // 進捗率を更新
+          if (newTask && onUpdateTask) {
+            await onUpdateTask(newTask.id, { progress })
+          }
         }
       } else {
         // 通常のSupabaseタスクの場合
@@ -255,6 +293,18 @@ export function GanttChart({
 
         if (subTask && onUpdateSubTask) {
           await onUpdateSubTask(subTaskId, { completed: !subTask.completed })
+
+          // 進捗率を再計算して更新
+          if (task && onUpdateTask) {
+            const updatedSubTasks =
+              task.subTasks?.map((st) => (st.id === subTaskId ? { ...st, completed: !st.completed } : st)) || []
+
+            const completedCount = updatedSubTasks.filter((st) => st.completed).length
+            const progress =
+              updatedSubTasks.length > 0 ? Math.round((completedCount / updatedSubTasks.length) * 100) : 0
+
+            await onUpdateTask(taskId, { progress })
+          }
         }
       }
     } catch (error) {
@@ -587,149 +637,145 @@ export function GanttChart({
         </div>
 
         {/* Chart Header */}
-        <div className="w-full bg-white/70 backdrop-blur-md border-b border-blue-200/50 p-4 flex-shrink-0">
-          <div className="w-full flex items-center gap-4">
-            <Calendar className="h-5 w-5 text-blue-600" />
-            <h2 className="text-lg font-semibold text-blue-800">ガントチャート</h2>
+        <div className="w-full flex items-center gap-4 p-6 bg-white/50 backdrop-blur-md border-b border-blue-200/50">
+          <Calendar className="h-5 w-5 text-blue-600" />
+          <h2 className="text-lg font-semibold text-blue-800">ガントチャート</h2>
 
-            {/* メインタスク追加ボタンをヘッダーに配置 */}
-            <Dialog open={isAddingMainTask} onOpenChange={setIsAddingMainTask}>
-              <DialogTrigger asChild>
-                <button className="text-blue-600 hover:text-blue-800 font-medium text-sm transition-colors duration-200 flex items-center gap-1 bg-blue-50/50 px-3 py-1 rounded-xl">
-                  <Plus className="h-4 w-4" />
-                  メインタスクを追加
-                </button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-2xl bg-white/95 backdrop-blur-md border-0 shadow-2xl">
-                <DialogHeader className="pb-6">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
-                      <CalendarDays className="h-6 w-6 text-blue-600" />
-                    </div>
-                    <div>
-                      <DialogTitle className="text-xl font-semibold text-gray-900">
-                        新しいメインタスクを追加
-                      </DialogTitle>
-                      <p className="text-sm text-gray-500 mt-1">タスクの詳細情報を入力してください</p>
-                    </div>
+          {/* メインタスク追加ボタンをヘッダーに配置 */}
+          <Dialog open={isAddingMainTask} onOpenChange={setIsAddingMainTask}>
+            <DialogTrigger asChild>
+              <button className="text-blue-600 hover:text-blue-800 font-medium text-sm transition-colors duration-200 flex items-center gap-1 bg-blue-50/50 px-3 py-1 rounded-xl">
+                <Plus className="h-4 w-4" />
+                メインタスクを追加
+              </button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-2xl bg-white/95 backdrop-blur-md border-0 shadow-2xl">
+              <DialogHeader className="pb-6">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+                    <CalendarDays className="h-6 w-6 text-blue-600" />
                   </div>
-                </DialogHeader>
+                  <div>
+                    <DialogTitle className="text-xl font-semibold text-gray-900">新しいメインタスクを追加</DialogTitle>
+                    <p className="text-sm text-gray-500 mt-1">タスクの詳細情報を入力してください</p>
+                  </div>
+                </div>
+              </DialogHeader>
 
-                <div className="space-y-6">
+              <div className="space-y-6">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-700">
+                    タスク名 <span className="text-red-500">*</span>
+                  </label>
+                  <Input
+                    placeholder="例: 要件定義、設計書作成など..."
+                    value={newMainTask.name}
+                    onChange={(e) => setNewMainTask((prev) => ({ ...prev, name: e.target.value }))}
+                    className="h-12 text-base border-2 border-gray-200 focus:border-blue-500 rounded-xl"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-gray-700">
-                      タスク名 <span className="text-red-500">*</span>
+                      開始日 <span className="text-red-500">*</span>
                     </label>
                     <Input
-                      placeholder="例: 要件定義、設計書作成など..."
-                      value={newMainTask.name}
-                      onChange={(e) => setNewMainTask((prev) => ({ ...prev, name: e.target.value }))}
+                      type="date"
+                      value={newMainTask.startDate}
+                      onChange={(e) => setNewMainTask((prev) => ({ ...prev, startDate: e.target.value }))}
                       className="h-12 text-base border-2 border-gray-200 focus:border-blue-500 rounded-xl"
                     />
                   </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-gray-700">
-                        開始日 <span className="text-red-500">*</span>
-                      </label>
-                      <Input
-                        type="date"
-                        value={newMainTask.startDate}
-                        onChange={(e) => setNewMainTask((prev) => ({ ...prev, startDate: e.target.value }))}
-                        className="h-12 text-base border-2 border-gray-200 focus:border-blue-500 rounded-xl"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-gray-700">
-                        終了日 <span className="text-red-500">*</span>
-                      </label>
-                      <Input
-                        type="date"
-                        value={newMainTask.endDate}
-                        onChange={(e) => setNewMainTask((prev) => ({ ...prev, endDate: e.target.value }))}
-                        className="h-12 text-base border-2 border-gray-200 focus:border-blue-500 rounded-xl"
-                      />
-                    </div>
-                  </div>
-
-                  {people.length > 0 && (
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-gray-700">担当者</label>
-                      <select
-                        value={newMainTask.assignedPersonId}
-                        onChange={(e) => setNewMainTask((prev) => ({ ...prev, assignedPersonId: e.target.value }))}
-                        className="w-full h-12 p-3 text-base border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      >
-                        <option value="">担当者を選択してください...</option>
-                        {people.map((person) => (
-                          <option key={person.id} value={person.id}>
-                            {person.firstName} {person.lastName}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-
-                  <div className="bg-blue-50 p-4 rounded-xl">
-                    <div className="flex items-center gap-2 text-sm text-blue-700">
-                      <CalendarDays className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                      <div>
-                        <p className="font-medium">タスク追加について</p>
-                        <p className="mt-1">
-                          追加されたタスクはリアルタイムで他のユーザーにも共有されます。サブタスクの追加や編集も可能です。
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        setIsAddingMainTask(false)
-                        setNewMainTask({ name: "", startDate: "", endDate: "", assignedPersonId: "" })
-                      }}
-                      className="px-6 py-2 border-gray-300 text-gray-700 hover:bg-gray-50 rounded-xl"
-                    >
-                      キャンセル
-                    </Button>
-                    <Button
-                      onClick={addMainTask}
-                      disabled={!newMainTask.name.trim() || !newMainTask.startDate || !newMainTask.endDate}
-                      className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50 disabled:cursor-not-allowed rounded-xl"
-                    >
-                      <Check className="w-4 h-4 mr-2" />
-                      タスクを追加
-                    </Button>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">
+                      終了日 <span className="text-red-500">*</span>
+                    </label>
+                    <Input
+                      type="date"
+                      value={newMainTask.endDate}
+                      onChange={(e) => setNewMainTask((prev) => ({ ...prev, endDate: e.target.value }))}
+                      className="h-12 text-base border-2 border-gray-200 focus:border-blue-500 rounded-xl"
+                    />
                   </div>
                 </div>
-              </DialogContent>
-            </Dialog>
 
-            {loading && (
-              <div className="flex items-center gap-2 text-sm text-blue-600">
-                <RefreshCw className="h-4 w-4 animate-spin" />
-                <span>データを読み込み中...</span>
+                {people.length > 0 && (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">担当者</label>
+                    <select
+                      value={newMainTask.assignedPersonId}
+                      onChange={(e) => setNewMainTask((prev) => ({ ...prev, assignedPersonId: e.target.value }))}
+                      className="w-full h-12 p-3 text-base border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      <option value="">担当者を選択してください...</option>
+                      {people.map((person) => (
+                        <option key={person.id} value={person.id}>
+                          {person.firstName} {person.lastName}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                <div className="bg-blue-50 p-4 rounded-xl">
+                  <div className="flex items-center gap-2 text-sm text-blue-700">
+                    <CalendarDays className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <p className="font-medium">タスク追加について</p>
+                      <p className="mt-1">
+                        追加されたタスクはリアルタイムで他のユーザーにも共有されます。サブタスクの追加や編集も可能です。
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setIsAddingMainTask(false)
+                      setNewMainTask({ name: "", startDate: "", endDate: "", assignedPersonId: "" })
+                    }}
+                    className="px-6 py-2 border-gray-300 text-gray-700 hover:bg-gray-50 rounded-xl"
+                  >
+                    キャンセル
+                  </Button>
+                  <Button
+                    onClick={addMainTask}
+                    disabled={!newMainTask.name.trim() || !newMainTask.startDate || !newMainTask.endDate}
+                    className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50 disabled:cursor-not-allowed rounded-xl"
+                  >
+                    <Check className="w-4 h-4 mr-2" />
+                    タスクを追加
+                  </Button>
+                </div>
               </div>
-            )}
-            <div className="ml-auto flex items-center gap-6 text-sm text-gray-600">
-              <div className="flex items-center gap-2">
-                <Flag className="h-3 w-3 text-yellow-500" />
-                <span>OPEN日</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 bg-teal-500 rounded-full"></div>
-                <span className="text-teal-600">完了タスク</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 bg-gray-400 rounded-full"></div>
-                <span className="text-gray-600">未割り当てタスク</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-                <span>バーをクリックで展開・右クリックで編集</span>
-              </div>
+            </DialogContent>
+          </Dialog>
+
+          {loading && (
+            <div className="flex items-center gap-2 text-sm text-blue-600">
+              <RefreshCw className="h-4 w-4 animate-spin" />
+              <span>データを読み込み中...</span>
+            </div>
+          )}
+          <div className="ml-auto flex items-center gap-6 text-sm text-gray-600">
+            <div className="flex items-center gap-2">
+              <Flag className="h-3 w-3 text-yellow-500" />
+              <span>OPEN日</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 bg-teal-500 rounded-full"></div>
+              <span className="text-teal-600">完了タスク</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 bg-gray-400 rounded-full"></div>
+              <span className="text-gray-600">未割り当てタスク</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
+              <span>バーをクリックで展開・右クリックで編集</span>
             </div>
           </div>
         </div>
@@ -882,12 +928,7 @@ export function GanttChart({
                           )}
 
                           <div className="flex-1 min-w-0">
-                            <h3 className={getTaskNameStyle(item.task.progress)}>
-                              {item.task.name}
-                              {item.task.id.startsWith("sheet-") && (
-                                <span className="ml-2 text-xs text-blue-500 font-normal">(編集可能)</span>
-                              )}
-                            </h3>
+                            <h3 className={getTaskNameStyle(item.task.progress)}>{item.task.name}</h3>
                           </div>
                         </div>
 

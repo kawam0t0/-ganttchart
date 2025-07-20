@@ -39,32 +39,37 @@ export function CommunicationGantt({ project, people, onBack }: CommunicationGan
 
   // データを統合
   useEffect(() => {
+    console.log("🔄 CommunicationGantt: Combining tasks...")
+    console.log("📊 Supabase tasks:", supabaseTasks)
+    console.log("📊 Sheet tasks for 連絡系:", sheetTasks["連絡系"])
+
     const categorySheetTasks = sheetTasks["連絡系"] || []
 
     // スプレッドシートタスクとSupabaseタスクを統合
-    // Supabaseタスクが優先（is_local=trueのタスク）
-    const combined = [...categorySheetTasks, ...supabaseTasks]
+    // 同じ名前のタスクがある場合はSupabaseを優先し、スプレッドシートタスクは除外
+    const supabaseTaskNames = new Set(supabaseTasks.map((task) => task.name))
+    const filteredSheetTasks = categorySheetTasks.filter((task) => !supabaseTaskNames.has(task.name))
 
-    // 重複を除去（同じ名前のタスクがある場合はSupabaseを優先）
-    const uniqueTasks = combined.reduce((acc: Task[], current) => {
-      const existingIndex = acc.findIndex((task) => task.name === current.name)
-      if (existingIndex >= 0) {
-        // Supabaseタスク（IDがsheet-で始まらない）を優先
-        if (!current.id.startsWith("sheet-")) {
-          acc[existingIndex] = current
-        }
-      } else {
-        acc.push(current)
-      }
-      return acc
-    }, [])
+    const combined = [...filteredSheetTasks, ...supabaseTasks]
 
-    setCombinedTasks(uniqueTasks)
+    console.log(`✅ CommunicationGantt: Combined ${combined.length} tasks`)
+    console.log(
+      "📋 Final task list:",
+      combined.map((t) => ({ name: t.name, id: t.id, subTaskCount: t.subTasks?.length || 0 })),
+    )
+
+    setCombinedTasks(combined)
     setIsLoading(supabaseLoading || sheetLoading)
   }, [supabaseTasks, sheetTasks, supabaseLoading, sheetLoading])
 
   const handleRefresh = async () => {
+    console.log("🔄 CommunicationGantt: Refreshing data...")
     await Promise.all([refetchSupabase(), refetchSheet()])
+  }
+
+  // エラー表示
+  if (sheetError) {
+    console.error("❌ CommunicationGantt: Sheet error:", sheetError)
   }
 
   return (

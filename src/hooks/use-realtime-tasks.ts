@@ -29,10 +29,10 @@ export function useRealtimeTasks(projectId: string | undefined, category: string
 
       if (tasksError) throw tasksError
 
-      const formattedTasks: Task[] = (tasksData as any[]).map((task: any) => {
+      const formattedTasks: Task[] = tasksData.map((task) => {
         const assignedPerson = people.find((p) => p.id === task.assigned_person_id)
 
-        const subTasks: SubTask[] = (task.subtasks as any[])
+        const subTasks: SubTask[] = task.subtasks
           .sort((a: any, b: any) => a.order_index - b.order_index)
           .map((subtask: any) => ({
             id: subtask.id,
@@ -175,6 +175,38 @@ export function useRealtimeTasks(projectId: string | undefined, category: string
       const { error } = await supabase.from("subtasks").update(updateData).eq("id", subTaskId)
 
       if (error) throw error
+
+      // 完了状態が変更された場合、親タスクの進捗率を更新
+      if (updates.completed !== undefined) {
+        // サブタスクの親タスクを特定
+        const { data: subtaskData, error: subtaskError } = await supabase
+          .from("subtasks")
+          .select("task_id")
+          .eq("id", subTaskId)
+          .single()
+
+        if (subtaskError) throw subtaskError
+
+        // 親タスクのすべてのサブタスクを取得
+        const { data: allSubtasks, error: allSubtasksError } = await supabase
+          .from("subtasks")
+          .select("completed")
+          .eq("task_id", subtaskData.task_id)
+
+        if (allSubtasksError) throw allSubtasksError
+
+        // 進捗率を計算
+        const completedCount = allSubtasks.filter((st) => st.completed).length
+        const progress = allSubtasks.length > 0 ? Math.round((completedCount / allSubtasks.length) * 100) : 0
+
+        // 親タスクの進捗率を更新
+        const { error: taskUpdateError } = await supabase
+          .from("tasks")
+          .update({ progress, updated_at: new Date().toISOString() })
+          .eq("id", subtaskData.task_id)
+
+        if (taskUpdateError) throw taskUpdateError
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update subtask")
       throw err
@@ -210,7 +242,7 @@ export function useRealtimeTasks(projectId: string | undefined, category: string
           table: "tasks",
           filter: `project_id=eq.${projectId}`,
         },
-        (payload: any) => {
+        (payload) => {
           console.log("Task change received:", payload)
           // タスクが変更されたら再取得（シンプルな実装）
           fetchTasks()
@@ -228,7 +260,7 @@ export function useRealtimeTasks(projectId: string | undefined, category: string
           schema: "public",
           table: "subtasks",
         },
-        (payload: any) => {
+        (payload) => {
           console.log("Subtask change received:", payload)
           // サブタスクが変更されたら再取得（シンプルな実装）
           fetchTasks()
