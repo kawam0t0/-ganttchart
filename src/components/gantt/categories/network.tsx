@@ -49,7 +49,8 @@ export function NetworkGantt({ project, people, onBack }: NetworkGanttProps) {
     const supabaseTaskNames = new Set(supabaseTasks.map((task) => task.name))
     const filteredSheetTasks = categorySheetTasks.filter((task) => !supabaseTaskNames.has(task.name))
 
-    // スプレッドシートタスクを先に、Supabaseタスクを後に配置
+    // 元の順序を保持：スプレッドシートタスクを先に、Supabaseタスクを後に配置
+    // 進捗率や完了状態でソートしない
     const combined = [...filteredSheetTasks, ...supabaseTasks]
 
     console.log(`✅ NetworkGantt: Combined ${combined.length} tasks`)

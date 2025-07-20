@@ -52,7 +52,8 @@ export function OthersGantt({ project, people, onBack }: OthersGanttProps) {
     const supabaseTaskNames = new Set(supabaseTasks.map((task) => task.name))
     const finalFilteredSheetTasks = filteredSheetTasks.filter((task) => !supabaseTaskNames.has(task.name))
 
-    // スプレッドシートタスクを先に、Supabaseタスクを後に配置
+    // 元の順序を保持：スプレッドシートタスクを先に、Supabaseタスクを後に配置
+    // 進捗率や完了状態でソートしない
     const combined = [...finalFilteredSheetTasks, ...supabaseTasks]
 
     console.log(`✅ OthersGantt: Combined ${combined.length} tasks`)

@@ -597,7 +597,7 @@ export function GanttChart({
       subTaskIndex?: number
     }> = []
 
-    // タスクを追加
+    // タスクを元の順序のまま追加（ソートしない）
     tasks.forEach((task) => {
       displayTasks.push({ type: "main", task })
 
@@ -857,7 +857,7 @@ export function GanttChart({
                     <div>
                       <p className="font-medium">タスク追加について</p>
                       <p className="mt-1">
-                        追加されたタスクはリアルタイムで他のユーザーにも共有されます。サブタスクの追加や編集も可能です。
+                        追加されたタスクはリアルタイムで他のユーザーにも共有されます。サブタスクの追加や編集も可能です���
                       </p>
                     </div>
                   </div>
