@@ -22,6 +22,7 @@ import {
   BarChart3,
   UserPlus,
   Users,
+  EyeOff,
 } from "lucide-react"
 import type { Person, Task } from "@/lib/types"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
@@ -494,7 +495,6 @@ export function GanttChart({
       lightColor = "#fde047" // yellow-300
     } else if (progress >= 20) {
       // 20%以上: オレンジ
-      
       darkColor = "#f97316" // orange-500
       lightColor = "#fdba74" // orange-300
     } else {
@@ -585,6 +585,24 @@ export function GanttChart({
   }
 
   const displayTasks = getDisplayTasks()
+
+  // メインタスクの非表示（削除の代わり）
+  const hideMainTask = async (taskId: string) => {
+    try {
+      // ローカル状態から非表示にする
+      setTasks((prevTasks) => prevTasks.filter((task) => task.id !== taskId))
+
+      // 展開状態もクリア
+      const newExpandedTasks = new Set(expandedTasks)
+      newExpandedTasks.delete(taskId)
+      setExpandedTasks(newExpandedTasks)
+
+      // 実際のデータベースからは削除せず、ローカルでのみ非表示
+      console.log(`Task ${taskId} hidden locally`)
+    } catch (error) {
+      console.error("Failed to hide main task:", error)
+    }
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 flex flex-col">
@@ -919,7 +937,8 @@ export function GanttChart({
                             </button>
                           )}
 
-                          {/* 担当者アイコンまたは未割り当て表示 */}
+                          {/* 担当者アイコンまたは未割り当て表示 - 色変化する丸を削除 */}
+                          {/* 以下の部分を削除
                           {item.task.assignedPerson ? (
                             <div
                               className={`w-3 h-3 rounded-full ${item.task.assignedPerson.bgColor} border border-blue-300 flex-shrink-0`}
@@ -927,12 +946,14 @@ export function GanttChart({
                           ) : (
                             <div className="w-3 h-3 rounded-full bg-gray-400 border border-gray-300 flex-shrink-0"></div>
                           )}
+                          */}
 
                           <div className="flex-1 min-w-0">
                             <h3 className={getTaskNameStyle(item.task.progress)}>{item.task.name}</h3>
                           </div>
                         </div>
 
+                        {/* ボタン部分を修正（担当者削除ボタンを削除し、ゴミ箱アイコンを非表示アイコンに変更）： */}
                         <div className="flex items-center gap-2">
                           {/* 担当者名または未割り当て表示 */}
                           {item.task.assignedPerson ? (
@@ -943,7 +964,7 @@ export function GanttChart({
                             <div className="text-xs text-gray-400">未割り当て</div>
                           )}
 
-                          {/* 担当者割り当て/変更ボタン - スプレッドシートタスクでも有効 */}
+                          {/* 担当者割り当て/変更ボタン */}
                           <button
                             onClick={() => openAssignDialog(item.task.id)}
                             className="p-1 hover:bg-blue-100 rounded transition-colors text-blue-500 hover:text-blue-700 opacity-0 group-hover:opacity-100"
@@ -952,25 +973,16 @@ export function GanttChart({
                             <UserPlus className="h-3 w-3" />
                           </button>
 
-                          {/* 担当者削除ボタン（担当者が設定されている場合のみ） */}
-                          {item.task.assignedPerson && (
-                            <button
-                              onClick={() => removePersonFromTask(item.task.id)}
-                              className="p-1 hover:bg-red-100 rounded transition-colors text-red-500 hover:text-red-700 opacity-0 group-hover:opacity-100"
-                              title="担当者を削除"
-                            >
-                              <X className="h-3 w-3" />
-                            </button>
-                          )}
+                          {/* 担当者削除ボタンを削除 */}
 
-                          {/* タスク削除ボタン - スプレッドシートタスクは削除不可 */}
+                          {/* タスク非表示ボタン - アイコンをEyeOffに変更 */}
                           {!item.task.id.startsWith("sheet-") && (
                             <button
-                              onClick={() => deleteMainTask(item.task.id)}
-                              className="p-1 hover:bg-red-100 rounded transition-colors text-red-500 hover:text-red-700 opacity-0 group-hover:opacity-100"
-                              title="メインタスクを削除"
+                              onClick={() => hideMainTask(item.task.id)}
+                              className="p-1 hover:bg-gray-100 rounded transition-colors text-gray-500 hover:text-gray-700 opacity-0 group-hover:opacity-100"
+                              title="メインタスクを非表示"
                             >
-                              <Trash2 className="h-3 w-3" />
+                              <EyeOff className="h-3 w-3" />
                             </button>
                           )}
                         </div>
@@ -1290,15 +1302,16 @@ export function GanttChart({
                   <UserPlus className="h-3 w-3" />
                   担当者を割り当て
                 </button>
+                {/* コンテキストメニューからも削除を非表示に変更： */}
                 <button
-                  className="w-full px-4 py-2 text-left text-sm hover:bg-red-50 text-red-600 flex items-center gap-2 transition-colors"
+                  className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 text-gray-600 flex items-center gap-2 transition-colors"
                   onClick={() => {
-                    deleteMainTask(showContextMenu.taskId)
+                    hideMainTask(showContextMenu.taskId)
                     setShowContextMenu(null)
                   }}
                 >
-                  <Trash2 className="h-3 w-3" />
-                  メインタスクを削除
+                  <EyeOff className="h-3 w-3" />
+                  メインタスクを非表示
                 </button>
               </>
             )}
