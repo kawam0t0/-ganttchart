@@ -128,11 +128,11 @@ export async function GET(request: NextRequest) {
 
     const tasks = dataRows.map((row, index) => {
       const subTasks = []
-      // C列からL列までのサブタスクを取得（空でないもののみ）
-      for (let i = 2; i <= 11; i++) {
+      // D列からM列までのサブタスクを取得（空でないもののみ）
+      for (let i = 3; i <= 12; i++) {
         if (row[i] && row[i].trim()) {
           subTasks.push({
-            id: `${row[1]}-sub-${i - 1}`,
+            id: `${row[2]}-sub-${i - 2}`,
             name: row[i].trim(),
             completed: false,
           })
@@ -141,8 +141,9 @@ export async function GET(request: NextRequest) {
 
       return {
         category: row[0] || "", // A列: category
-        mainTask: row[1] || "", // B列: main_task
-        subTasks: subTasks, // C-L列: サブタスク
+        displayOrder: Number.parseInt(row[1]) || 9999, // B列: number（表示順番号）
+        mainTask: row[2] || "", // C列: main_task
+        subTasks: subTasks, // D-M列: サブタスク
         period: Number.parseInt(row[12]) || 1, // M列: period（日数）
         fromOpen: Number.parseInt(row[13]) || 0, // N列: from_open（OPEN日からの逆算日数）
       }

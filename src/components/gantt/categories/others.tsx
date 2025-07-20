@@ -52,13 +52,31 @@ export function OthersGantt({ project, people, onBack }: OthersGanttProps) {
     const supabaseTaskNames = new Set(supabaseTasks.map((task) => task.name))
     const finalFilteredSheetTasks = filteredSheetTasks.filter((task) => !supabaseTaskNames.has(task.name))
 
-    // スプレッドシートタスクを先に、Supabaseタスクを後に配置
-    const combined = [...finalFilteredSheetTasks, ...supabaseTasks]
+    // スプレッドシートタスクをdisplayOrder（orderIndex）でソート
+    const sortedSheetTasks = finalFilteredSheetTasks.sort((a, b) => {
+      const orderA = a.orderIndex !== undefined ? a.orderIndex : 9999
+      const orderB = b.orderIndex !== undefined ? b.orderIndex : 9999
+      return orderA - orderB
+    })
+
+    // SupabaseタスクもorderIndexでソート
+    const sortedSupabaseTasks = supabaseTasks.sort((a, b) => {
+      const orderA = a.orderIndex !== undefined ? a.orderIndex : 10000
+      const orderB = b.orderIndex !== undefined ? b.orderIndex : 10000
+      return orderA - orderB
+    })
+
+    const combined = [...sortedSheetTasks, ...sortedSupabaseTasks]
 
     console.log(`✅ OthersGantt: Combined ${combined.length} tasks`)
     console.log(
       "📋 Final task list:",
-      combined.map((t) => ({ name: t.name, id: t.id, subTaskCount: t.subTasks?.length || 0 })),
+      combined.map((t) => ({
+        name: t.name,
+        id: t.id,
+        orderIndex: t.orderIndex,
+        subTaskCount: t.subTasks?.length || 0,
+      })),
     )
 
     setCombinedTasks(combined)

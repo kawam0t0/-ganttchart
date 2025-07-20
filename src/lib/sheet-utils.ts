@@ -2,6 +2,7 @@ import type { Task, SubTask } from "./types"
 
 export interface SheetTask {
   category: string
+  displayOrder: number // 新規追加：表示順番号
   mainTask: string
   subTasks: { id: string; name: string; completed: boolean }[]
   period: number
@@ -21,7 +22,6 @@ export function convertSheetTasksToGanttTasks(sheetTasks: SheetTask[], openDate:
     // サブタスクを変換
     const subTasks: SubTask[] = sheetTask.subTasks.map((subTask) => ({
       ...subTask,
-      assignedPerson: people.length > 0 ? people[index % people.length] : undefined,
     }))
 
     // 進捗率を計算（完了したサブタスクの割合）
@@ -36,6 +36,7 @@ export function convertSheetTasksToGanttTasks(sheetTasks: SheetTask[], openDate:
       progress,
       assignedPerson: people.length > 0 ? people[index % people.length] : undefined,
       subTasks,
+      orderIndex: sheetTask.displayOrder, // スプレッドシートのB列番号を使用
     }
   })
 }

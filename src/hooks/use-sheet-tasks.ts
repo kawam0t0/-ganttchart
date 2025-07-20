@@ -60,7 +60,9 @@ export function useSheetTasks(openDate: Date | undefined, people: any[]) {
         }
 
         const category = sheetTask.category
-        console.log(`📝 Processing task: "${sheetTask.mainTask}" in category: "${category}"`)
+        console.log(
+          `📝 Processing task: "${sheetTask.mainTask}" in category: "${category}", displayOrder: ${sheetTask.displayOrder}`,
+        )
 
         // カテゴリーが存在するかチェック
         if (categorizedTasks[category]) {
@@ -79,7 +81,7 @@ export function useSheetTasks(openDate: Date | undefined, people: any[]) {
             endDate,
             progress: 0, // デフォルトで0%に設定
             assignedPerson: undefined, // デフォルトでは担当者を割り当てない
-            orderIndex: index, // スプレッドシートの順序を保持
+            orderIndex: sheetTask.displayOrder, // スプレッドシートのB列番号を使用
             subTasks: sheetTask.subTasks.map((st) => ({
               ...st,
               // assignedPersonは設定しない
@@ -87,10 +89,25 @@ export function useSheetTasks(openDate: Date | undefined, people: any[]) {
           }
 
           categorizedTasks[category].push(task)
-          console.log(`✅ Added task "${task.name}" to category "${category}" with orderIndex ${index}`)
+          console.log(
+            `✅ Added task "${task.name}" to category "${category}" with displayOrder ${sheetTask.displayOrder}`,
+          )
         } else {
           console.warn(`⚠️ Unknown category: "${category}" for task: "${sheetTask.mainTask}"`)
         }
+      })
+
+      // 各カテゴリーのタスクをdisplayOrder（orderIndex）でソート
+      Object.keys(categorizedTasks).forEach((category) => {
+        categorizedTasks[category].sort((a, b) => {
+          const orderA = a.orderIndex !== undefined ? a.orderIndex : 9999
+          const orderB = b.orderIndex !== undefined ? b.orderIndex : 9999
+          return orderA - orderB
+        })
+        console.log(
+          `🔢 Sorted category "${category}" by displayOrder:`,
+          categorizedTasks[category].map((t) => ({ name: t.name, order: t.orderIndex })),
+        )
       })
 
       // 各カテゴリーのタスク数をログ出力

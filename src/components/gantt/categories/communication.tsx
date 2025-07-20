@@ -50,13 +50,22 @@ export function CommunicationGantt({ project, people, onBack }: CommunicationGan
     const supabaseTaskNames = new Set(supabaseTasks.map((task) => task.name))
     const filteredSheetTasks = categorySheetTasks.filter((task) => !supabaseTaskNames.has(task.name))
 
-    // 元の順序を保持：スプレッドシートタスクを先に、Supabaseタスクを後に配置
-    // orderIndexで明示的にソート
-    const combined = [...filteredSheetTasks, ...supabaseTasks].sort((a, b) => {
+    // スプレッドシートタスクをdisplayOrder（orderIndex）でソート
+    const sortedSheetTasks = filteredSheetTasks.sort((a, b) => {
       const orderA = a.orderIndex !== undefined ? a.orderIndex : 9999
       const orderB = b.orderIndex !== undefined ? b.orderIndex : 9999
       return orderA - orderB
     })
+
+    // Supabaseタスクも念のためorderIndexでソート（新規追加タスクは最後に表示）
+    const sortedSupabaseTasks = supabaseTasks.sort((a, b) => {
+      const orderA = a.orderIndex !== undefined ? a.orderIndex : 10000 // 大きな値で最後に表示
+      const orderB = b.orderIndex !== undefined ? b.orderIndex : 10000
+      return orderA - orderB
+    })
+
+    // ソート済みタスクを結合
+    const combined = [...sortedSheetTasks, ...sortedSupabaseTasks]
 
     console.log(`✅ CommunicationGantt: Combined ${combined.length} tasks`)
     console.log(
