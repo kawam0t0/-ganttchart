@@ -1,58 +1,27 @@
 "use client"
 
-import type React from "react"
-
-import { useState, useRef, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import {
+  Plus,
   Calendar,
+  User,
+  Edit3,
+  Trash2,
   Flag,
   RefreshCw,
   ChevronDown,
   ChevronRight,
-  Plus,
-  Edit3,
-  Trash2,
-  User,
   Check,
-  X,
-  MoreVertical,
-  CalendarDays,
   BarChart3,
-  UserPlus,
-  Users,
-  EyeOff,
   Eye,
-  Settings,
+  EyeOff,
 } from "lucide-react"
-import type { Person, Task } from "@/lib/types"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-
-// Header Component for Gantt Chart
-function GanttHeader() {
-  return (
-    <header className="w-full bg-gradient-to-r from-blue-600 to-blue-700 backdrop-blur-md border-b border-blue-500/50 shadow-xl sticky top-0 z-50">
-      <div className="max-w-7xl mx-auto px-6 py-6">
-        <div className="flex items-center justify-between">
-          {/* Logo */}
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg">
-              <BarChart3 className="h-7 w-7 text-white" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold text-white">Spchart</h1>
-              <p className="text-sm text-blue-100">洗車場プロジェクト管理</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </header>
-  )
-}
-
-// Footer Component for Gantt Chart
-function GanttFooter() {}
+import type { Task, SubTask, Person } from "@/lib/types"
 
 interface GanttChartProps {
   project: { id: string; name: string; openDate?: Date }
@@ -62,8 +31,12 @@ interface GanttChartProps {
   onBack: () => void
   loading?: boolean
   onRefresh?: () => void
-  // Supabase操作用の関数
-  onAddTask?: (taskData: { name: string; startDate: Date; endDate: Date; assignedPersonId?: string }) => Promise<any>
+  onAddTask?: (taskData: {
+    name: string
+    startDate: Date
+    endDate: Date
+    assignedPersonId?: string
+  }) => Promise<any>
   onUpdateTask?: (taskId: string, updates: Partial<Task>) => Promise<void>
   onDeleteTask?: (taskId: string) => Promise<void>
   onAddSubTask?: (taskId: string, name: string) => Promise<any>
@@ -71,10 +44,18 @@ interface GanttChartProps {
   onDeleteSubTask?: (subTaskId: string) => Promise<void>
 }
 
+interface GanttItem {
+  type: "task" | "subtask"
+  task: Task
+  subTask?: SubTask
+  level: number
+  isVisible: boolean
+}
+
 export function GanttChart({
   project,
   category,
-  tasks: initialTasks,
+  tasks,
   people,
   onBack,
   loading = false,
@@ -86,584 +67,327 @@ export function GanttChart({
   onUpdateSubTask,
   onDeleteSubTask,
 }: GanttChartProps) {
-  const [tasks, setTasks] = useState<Task[]>(initialTasks)
-  const [hiddenTasks, setHiddenTasks] = useState<Task[]>([]) // 非表示タスクの管理
-  const [isAddingMainTask, setIsAddingMainTask] = useState(false)
-  const [isHiddenTasksDialogOpen, setIsHiddenTasksDialogOpen] = useState(false)
-  const [newMainTask, setNewMainTask] = useState({
+  // State management
+  const [expandedTasks, setExpandedTasks] = useState<Set<string>>(new Set())
+  const [hiddenTasks, setHiddenTasks] = useState<Set<string>>(new Set())
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null)
+  const [selectedSubTask, setSelectedSubTask] = useState<SubTask | null>(null)
+  const [isAddTaskOpen, setIsAddTaskOpen] = useState(false)
+  const [isEditTaskOpen, setIsEditTaskOpen] = useState(false)
+  const [isEditSubTaskOpen, setIsEditSubTaskOpen] = useState(false)
+  const [isDeleteTaskOpen, setIsDeleteTaskOpen] = useState(false)
+  const [isDeleteSubTaskOpen, setIsDeleteSubTaskOpen] = useState(false)
+  const [isAddSubTaskOpen, setIsAddSubTaskOpen] = useState(false)
+  const [newTaskForm, setNewTaskForm] = useState({
     name: "",
     startDate: "",
     endDate: "",
     assignedPersonId: "",
   })
-
-  // 担当者割り当て用の状態
-  const [assigningTaskId, setAssigningTaskId] = useState<string | null>(null)
-  const [isAssignDialogOpen, setIsAssignDialogOpen] = useState(false)
-
-  // initialTasksが変更されたときにローカルのtasks状態を更新
-  useEffect(() => {
-    setTasks(initialTasks)
-  }, [initialTasks])
-
-  const [expandedTasks, setExpandedTasks] = useState<Set<string>>(new Set())
-  const [editingSubTask, setEditingSubTask] = useState<{ taskId: string; subTaskId: string } | null>(null)
-  const [editingTaskId, setEditingTaskId] = useState<string | null>(null)
+  const [editTaskForm, setEditTaskForm] = useState({
+    name: "",
+    assignedPersonId: "",
+  })
+  const [editSubTaskForm, setEditSubTaskForm] = useState({
+    name: "",
+  })
   const [newSubTaskName, setNewSubTaskName] = useState("")
-  const [editSubTaskName, setEditSubTaskName] = useState("")
-  const [showContextMenu, setShowContextMenu] = useState<{
-    x: number
-    y: number
-    taskId: string
-    subTaskId?: string
-  } | null>(null)
 
-  const monthHeaderScrollRef = useRef<HTMLDivElement>(null)
-  const dateHeaderScrollRef = useRef<HTMLDivElement>(null)
-  const contentScrollRef = useRef<HTMLDivElement>(null)
-  const taskNameScrollRef = useRef<HTMLDivElement>(null) // タスク名エリアのスクロール参照を追加
+  // Initialize expanded tasks
+  useEffect(() => {
+    const allTaskIds = new Set(tasks.map((task) => task.id))
+    setExpandedTasks(allTaskIds)
+  }, [tasks])
 
-  // スクロール位置を保存するための参照
-  // const scrollPositionRef = useRef({
-  //   horizontal: 0,
-  //   vertical: 0,
-  // })
-
-  // OPEN日から4ヶ月前を開始日として設定
-  const openDate = project.openDate || new Date(2024, 3, 1)
-  const startDate = new Date(openDate)
-  startDate.setMonth(startDate.getMonth() - 4)
-  startDate.setDate(1)
-
-  const endDate = new Date(openDate)
-  endDate.setDate(endDate.getDate() + 30)
-
-  const dateRange: Date[] = []
-  for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
-    dateRange.push(new Date(d))
-  }
-
-  // スクロール位置を保存する関数
-  // const saveScrollPosition = () => {
-  //   if (contentScrollRef.current && taskNameScrollRef.current) {
-  //     scrollPositionRef.current = {
-  //       horizontal: contentScrollRef.current.scrollLeft,
-  //       vertical: taskNameScrollRef.current.scrollTop,
-  //     }
-  //   }
-  // }
-
-  // スクロール位置を復元する関数
-  // const restoreScrollPosition = () => {
-  //   requestAnimationFrame(() => {
-  //     if (contentScrollRef.current && taskNameScrollRef.current) {
-  //       contentScrollRef.current.scrollLeft = scrollPositionRef.current.horizontal
-  //       taskNameScrollRef.current.scrollTop = scrollPositionRef.current.vertical
-
-  //       // 他のスクロール要素も同期
-  //       syncScrolls(scrollPositionRef.current.horizontal)
-  //     }
-  //   })
-  // }
-
-  // タスクバーのクリックハンドラー
-  const handleTaskBarClick = (taskId: string) => {
-    // saveScrollPosition() // スクロール位置を保存
-    const newExpandedTasks = new Set(expandedTasks)
-    if (expandedTasks.has(taskId)) {
-      newExpandedTasks.delete(taskId)
-    } else {
-      newExpandedTasks.add(taskId)
+  // Calculate date range for the chart
+  const dateRange = useMemo(() => {
+    if (tasks.length === 0) {
+      const today = new Date()
+      return {
+        startDate: today,
+        endDate: new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000), // 30 days from today
+        totalDays: 30,
+      }
     }
-    setExpandedTasks(newExpandedTasks)
-  }
 
-  // 担当者を割り当てる関数
-  const assignPersonToTask = async (taskId: string, personId: string) => {
-    try {
-      const selectedPerson = people.find((p) => p.id === personId)
+    let minDate = new Date(Math.min(...tasks.map((task) => task.startDate.getTime())))
+    let maxDate = new Date(Math.max(...tasks.map((task) => task.endDate.getTime())))
 
-      // スプレッドシートタスクの場合は、まずSupabaseに保存してから更新
-      if (taskId.startsWith("sheet-")) {
-        const originalTask = tasks.find((t) => t.id === taskId)
-        if (originalTask && onAddTask) {
-          // 進捗率を計算
-          const completedCount = originalTask.subTasks?.filter((st) => st.completed).length || 0
-          const progress = originalTask.subTasks?.length
-            ? Math.round((completedCount / originalTask.subTasks.length) * 100)
-            : 0
+    // Add some padding
+    minDate = new Date(minDate.getTime() - 7 * 24 * 60 * 60 * 1000) // 1 week before
+    maxDate = new Date(maxDate.getTime() + 7 * 24 * 60 * 60 * 1000) // 1 week after
 
-          // スプレッドシートタスクをSupabaseタスクとして新規作成
-          const newTask = await onAddTask({
-            name: originalTask.name,
-            startDate: originalTask.startDate,
-            endDate: originalTask.endDate,
-            assignedPersonId: personId,
+    const totalDays = Math.ceil((maxDate.getTime() - minDate.getTime()) / (24 * 60 * 60 * 1000))
+
+    return {
+      startDate: minDate,
+      endDate: maxDate,
+      totalDays,
+    }
+  }, [tasks])
+
+  // Generate calendar headers
+  const calendarHeaders = useMemo(() => {
+    const headers = []
+    const currentDate = new Date(dateRange.startDate)
+
+    for (let i = 0; i < dateRange.totalDays; i++) {
+      headers.push({
+        date: new Date(currentDate),
+        day: currentDate.getDate(),
+        month: currentDate.getMonth() + 1,
+        isWeekend: currentDate.getDay() === 0 || currentDate.getDay() === 6,
+        isToday: currentDate.toDateString() === new Date().toDateString(),
+        isOpenDate: project.openDate && currentDate.toDateString() === project.openDate.toDateString(),
+      })
+      currentDate.setDate(currentDate.getDate() + 1)
+    }
+
+    return headers
+  }, [dateRange, project.openDate])
+
+  // Create gantt items (tasks and subtasks)
+  const ganttItems = useMemo(() => {
+    const items: GanttItem[] = []
+
+    tasks.forEach((task) => {
+      const isTaskHidden = hiddenTasks.has(task.id)
+      const isTaskExpanded = expandedTasks.has(task.id)
+
+      // Add main task
+      items.push({
+        type: "task",
+        task,
+        level: 0,
+        isVisible: !isTaskHidden,
+      })
+
+      // Add subtasks if task is expanded and not hidden
+      if (isTaskExpanded && !isTaskHidden && task.subTasks) {
+        task.subTasks.forEach((subTask) => {
+          items.push({
+            type: "subtask",
+            task,
+            subTask,
+            level: 1,
+            isVisible: true,
           })
-
-          // サブタスクを移行
-          if (newTask && originalTask.subTasks && onAddSubTask) {
-            for (const subTask of originalTask.subTasks) {
-              const createdSubTask = await onAddSubTask(newTask.id, subTask.name)
-              if (createdSubTask && subTask.completed && onUpdateSubTask) {
-                await onUpdateSubTask(createdSubTask.id, { completed: true })
-              }
-            }
-          }
-
-          // 進捗率を更新
-          if (newTask && onUpdateTask) {
-            await onUpdateTask(newTask.id, { progress })
-          }
-        }
-      } else if (onUpdateTask && selectedPerson) {
-        await onUpdateTask(taskId, { assignedPerson: selectedPerson })
+        })
       }
+    })
 
-      setIsAssignDialogOpen(false)
-      setAssigningTaskId(null)
-    } catch (error) {
-      console.error("Failed to assign person to task:", error)
+    return items.filter((item) => item.isVisible)
+  }, [tasks, expandedTasks, hiddenTasks])
+
+  // Helper functions
+  const calculateTaskPosition = (startDate: Date, endDate: Date) => {
+    const startOffset = Math.max(
+      0,
+      Math.floor((startDate.getTime() - dateRange.startDate.getTime()) / (24 * 60 * 60 * 1000)),
+    )
+    const duration = Math.max(1, Math.ceil((endDate.getTime() - startDate.getTime()) / (24 * 60 * 60 * 1000)))
+
+    return {
+      left: (startOffset / dateRange.totalDays) * 100,
+      width: (duration / dateRange.totalDays) * 100,
     }
   }
 
-  // 担当者を削除する関数
-  const removePersonFromTask = async (taskId: string) => {
-    try {
-      if (onUpdateTask) {
-        await onUpdateTask(taskId, { assignedPerson: undefined })
-      }
-    } catch (error) {
-      console.error("Failed to remove person from task:", error)
+  const getTaskNameStyle = (progress: number) => {
+    if (progress === 100) {
+      return "text-green-700 font-medium line-through"
+    } else if (progress > 0) {
+      return "text-blue-700 font-medium"
     }
+    return "text-gray-700 font-medium"
   }
 
-  // 担当者割り当てダイアログを開く
-  const openAssignDialog = (taskId: string) => {
-    setAssigningTaskId(taskId)
-    setIsAssignDialogOpen(true)
+  const getProgressColor = (progress: number) => {
+    if (progress === 100) return "bg-green-500"
+    if (progress >= 75) return "bg-blue-500"
+    if (progress >= 50) return "bg-yellow-500"
+    if (progress >= 25) return "bg-orange-500"
+    return "bg-red-500"
   }
 
-  // メインタスクの追加
-  const addMainTask = async () => {
-    if (!newMainTask.name.trim() || !newMainTask.startDate || !newMainTask.endDate || !onAddTask) return
+  // Event handlers
+  const toggleTaskExpansion = (taskId: string) => {
+    setExpandedTasks((prev) => {
+      const newSet = new Set(prev)
+      if (newSet.has(taskId)) {
+        newSet.delete(taskId)
+      } else {
+        newSet.add(taskId)
+      }
+      return newSet
+    })
+  }
+
+  const toggleTaskVisibility = (taskId: string) => {
+    setHiddenTasks((prev) => {
+      const newSet = new Set(prev)
+      if (newSet.has(taskId)) {
+        newSet.delete(taskId)
+      } else {
+        newSet.add(taskId)
+      }
+      return newSet
+    })
+  }
+
+  const handleAddTask = async () => {
+    if (!onAddTask || !newTaskForm.name || !newTaskForm.startDate || !newTaskForm.endDate) return
 
     try {
       await onAddTask({
-        name: newMainTask.name.trim(),
-        startDate: new Date(newMainTask.startDate),
-        endDate: new Date(newMainTask.endDate),
-        assignedPersonId: newMainTask.assignedPersonId || undefined,
+        name: newTaskForm.name,
+        startDate: new Date(newTaskForm.startDate),
+        endDate: new Date(newTaskForm.endDate),
+        assignedPersonId: newTaskForm.assignedPersonId || undefined,
       })
+      setNewTaskForm({ name: "", startDate: "", endDate: "", assignedPersonId: "" })
+      setIsAddTaskOpen(false)
+    } catch (error) {
+      console.error("Failed to add task:", error)
+    }
+  }
 
-      setNewMainTask({
-        name: "",
-        startDate: "",
-        endDate: "",
-        assignedPersonId: "",
+  const handleEditTask = async () => {
+    if (!onUpdateTask || !selectedTask) return
+
+    try {
+      const assignedPerson = editTaskForm.assignedPersonId
+        ? people.find((p) => p.id === editTaskForm.assignedPersonId)
+        : undefined
+
+      await onUpdateTask(selectedTask.id, {
+        name: editTaskForm.name,
+        assignedPerson,
       })
-      setIsAddingMainTask(false)
+      setIsEditTaskOpen(false)
+      setSelectedTask(null)
     } catch (error) {
-      console.error("Failed to add main task:", error)
+      console.error("Failed to update task:", error)
     }
   }
 
-  // メインタスクの削除
-  const deleteMainTask = async (taskId: string) => {
-    try {
-      if (onDeleteTask) {
-        await onDeleteTask(taskId)
-      }
+  const handleDeleteTask = async () => {
+    if (!onDeleteTask || !selectedTask) return
 
-      // 展開状態もクリア
-      const newExpandedTasks = new Set(expandedTasks)
-      newExpandedTasks.delete(taskId)
-      setExpandedTasks(newExpandedTasks)
+    try {
+      await onDeleteTask(selectedTask.id)
+      setIsDeleteTaskOpen(false)
+      setSelectedTask(null)
     } catch (error) {
-      console.error("Failed to delete main task:", error)
+      console.error("Failed to delete task:", error)
     }
   }
 
-  // サブタスクの完了状態切り替え
-  const toggleSubTaskCompletion = async (taskId: string, subTaskId: string) => {
-    try {
-      // スプレッドシートタスクの場合は、まずSupabaseに保存してからサブタスクを更新
-      if (taskId.startsWith("sheet-")) {
-        const originalTask = tasks.find((t) => t.id === taskId)
-        if (originalTask && onAddTask) {
-          // サブタスクの状態を更新
-          const updatedSubTasks =
-            originalTask.subTasks?.map((st) => (st.id === subTaskId ? { ...st, completed: !st.completed } : st)) || []
-
-          // 進捗率を計算
-          const completedCount = updatedSubTasks.filter((st) => st.completed).length
-          const progress = updatedSubTasks.length > 0 ? Math.round((completedCount / updatedSubTasks.length) * 100) : 0
-
-          // 新しいSupabaseタスクを作成
-          const newTask = await onAddTask({
-            name: originalTask.name,
-            startDate: originalTask.startDate,
-            endDate: originalTask.endDate,
-            assignedPersonId: originalTask.assignedPerson?.id,
-          })
-
-          // 新しく作成されたタスクにサブタスクを追加
-          if (newTask && onAddSubTask) {
-            for (const subTask of updatedSubTasks) {
-              const createdSubTask = await onAddSubTask(newTask.id, subTask.name)
-              if (createdSubTask && subTask.completed && onUpdateSubTask) {
-                await onUpdateSubTask(createdSubTask.id, { completed: true })
-              }
-            }
-          }
-
-          // 進捗率を更新
-          if (newTask && onUpdateTask) {
-            await onUpdateTask(newTask.id, { progress })
-          }
-        }
-      } else {
-        // 通常のSupabaseタスクの場合
-        const task = tasks.find((t) => t.id === taskId)
-        const subTask = task?.subTasks?.find((st) => st.id === subTaskId)
-
-        if (subTask && onUpdateSubTask) {
-          await onUpdateSubTask(subTaskId, { completed: !subTask.completed })
-
-          // 進捗率を再計算して更新
-          if (task && onUpdateTask) {
-            const updatedSubTasks =
-              task.subTasks?.map((st) => (st.id === subTaskId ? { ...st, completed: !st.completed } : st)) || []
-
-            const completedCount = updatedSubTasks.filter((st) => st.completed).length
-            const progress =
-              updatedSubTasks.length > 0 ? Math.round((completedCount / updatedSubTasks.length) * 100) : 0
-
-            await onUpdateTask(taskId, { progress })
-          }
-        }
-      }
-    } catch (error) {
-      console.error("Failed to toggle subtask completion:", error)
-    }
-  }
-
-  // サブタスクの追加
-  const addSubTask = async (taskId: string) => {
-    if (!newSubTaskName.trim() || !onAddSubTask) return
+  const handleAddSubTask = async () => {
+    if (!onAddSubTask || !selectedTask || !newSubTaskName) return
 
     try {
-      await onAddSubTask(taskId, newSubTaskName.trim())
+      await onAddSubTask(selectedTask.id, newSubTaskName)
       setNewSubTaskName("")
+      setIsAddSubTaskOpen(false)
+      setSelectedTask(null)
     } catch (error) {
       console.error("Failed to add subtask:", error)
     }
   }
 
-  // サブタスクの削除
-  const deleteSubTask = async (taskId: string, subTaskId: string) => {
+  const handleEditSubTask = async () => {
+    if (!onUpdateSubTask || !selectedSubTask) return
+
     try {
-      if (onDeleteSubTask) {
-        await onDeleteSubTask(subTaskId)
-      }
+      await onUpdateSubTask(selectedSubTask.id, {
+        name: editSubTaskForm.name,
+      })
+      setIsEditSubTaskOpen(false)
+      setSelectedSubTask(null)
+    } catch (error) {
+      console.error("Failed to update subtask:", error)
+    }
+  }
+
+  const handleDeleteSubTask = async () => {
+    if (!onDeleteSubTask || !selectedSubTask) return
+
+    try {
+      await onDeleteSubTask(selectedSubTask.id)
+      setIsDeleteSubTaskOpen(false)
+      setSelectedSubTask(null)
     } catch (error) {
       console.error("Failed to delete subtask:", error)
     }
   }
 
-  // サブタスクの名前編集
-  const updateSubTaskName = async (taskId: string, subTaskId: string, newName: string) => {
-    if (!newName.trim() || !onUpdateSubTask) return
+  const handleSubTaskToggle = async (subTask: SubTask) => {
+    if (!onUpdateSubTask) return
 
     try {
-      await onUpdateSubTask(subTaskId, { name: newName.trim() })
-      setEditingSubTask(null)
-      setEditSubTaskName("")
+      await onUpdateSubTask(subTask.id, {
+        completed: !subTask.completed,
+      })
     } catch (error) {
-      console.error("Failed to update subtask name:", error)
+      console.error("Failed to toggle subtask:", error)
     }
   }
 
-  // 右クリックメニューの処理
-  const handleContextMenu = (e: React.MouseEvent, taskId: string, subTaskId?: string) => {
-    e.preventDefault()
-    setShowContextMenu({
-      x: e.clientX,
-      y: e.clientY,
-      taskId,
-      subTaskId,
+  const openEditTask = (task: Task) => {
+    setSelectedTask(task)
+    setEditTaskForm({
+      name: task.name,
+      assignedPersonId: task.assignedPerson?.id || "",
     })
+    setIsEditTaskOpen(true)
   }
 
-  // 編集モードの開始
-  const startEditingSubTask = (taskId: string, subTaskId: string, currentName: string) => {
-    setEditingSubTask({ taskId, subTaskId })
-    setEditSubTaskName(currentName)
-    setShowContextMenu(null)
-  }
-
-  // 月ヘッダーを生成する関数
-  const generateMonthHeaders = () => {
-    const monthHeaders: { month: string; span: number; startIndex: number }[] = []
-    let currentMonth = ""
-    let currentSpan = 0
-    let startIndex = 0
-
-    dateRange.forEach((date, index) => {
-      const monthKey = `${date.getFullYear()}年${String(date.getMonth() + 1).padStart(2, "0")}月`
-
-      if (currentMonth !== monthKey) {
-        if (currentMonth !== "") {
-          monthHeaders.push({ month: currentMonth, span: currentSpan, startIndex })
-        }
-        currentMonth = monthKey
-        currentSpan = 1
-        startIndex = index
-      } else {
-        currentSpan++
-      }
+  const openEditSubTask = (subTask: SubTask) => {
+    setSelectedSubTask(subTask)
+    setEditSubTaskForm({
+      name: subTask.name,
     })
-
-    if (currentMonth !== "") {
-      monthHeaders.push({ month: currentMonth, span: currentSpan, startIndex })
-    }
-
-    return monthHeaders
+    setIsEditSubTaskOpen(true)
   }
 
-  const monthHeaders = generateMonthHeaders()
-
-  // スクロール同期関数
-  const syncScrolls = (sourceScrollLeft: number) => {
-    requestAnimationFrame(() => {
-      if (monthHeaderScrollRef.current && monthHeaderScrollRef.current.scrollLeft !== sourceScrollLeft) {
-        monthHeaderScrollRef.current.scrollLeft = sourceScrollLeft
-      }
-      if (dateHeaderScrollRef.current && dateHeaderScrollRef.current.scrollLeft !== sourceScrollLeft) {
-        dateHeaderScrollRef.current.scrollLeft = sourceScrollLeft
-      }
-      if (contentScrollRef.current && contentScrollRef.current.scrollLeft !== sourceScrollLeft) {
-        contentScrollRef.current.scrollLeft = sourceScrollLeft
-      }
-    })
+  const openDeleteTask = (task: Task) => {
+    setSelectedTask(task)
+    setIsDeleteTaskOpen(true)
   }
 
-  const handleMonthHeaderScroll = () => {
-    if (monthHeaderScrollRef.current) {
-      syncScrolls(monthHeaderScrollRef.current.scrollLeft)
-    }
+  const openDeleteSubTask = (subTask: SubTask) => {
+    setSelectedSubTask(subTask)
+    setIsDeleteSubTaskOpen(true)
   }
 
-  const handleDateHeaderScroll = () => {
-    if (dateHeaderScrollRef.current) {
-      syncScrolls(dateHeaderScrollRef.current.scrollLeft)
-    }
+  const openAddSubTask = (task: Task) => {
+    setSelectedTask(task)
+    setIsAddSubTaskOpen(true)
   }
 
-  const handleContentScroll = () => {
-    if (contentScrollRef.current) {
-      syncScrolls(contentScrollRef.current.scrollLeft)
-    }
-  }
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 relative overflow-hidden flex flex-col">
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <div className="absolute -top-40 -right-40 w-80 h-80 bg-blue-400/10 rounded-full blur-3xl"></div>
+          <div className="absolute top-1/2 -left-40 w-96 h-96 bg-indigo-400/10 rounded-full blur-3xl"></div>
+          <div className="absolute -bottom-40 right-1/3 w-80 h-80 bg-purple-400/10 rounded-full blur-3xl"></div>
+        </div>
 
-  // 六曜を計算する関数
-  const getRokuyo = (date: Date): string => {
-    const rokuyoList = ["大安", "赤口", "先勝", "友引", "先負", "仏滅"]
-    const year = date.getFullYear()
-    const month = date.getMonth() + 1
-    const day = date.getDate()
-
-    const totalDays = Math.floor((year - 1900) * 365.25) + Math.floor((month - 1) * 30.44) + day
-    return rokuyoList[totalDays % 6]
-  }
-
-  const getTaskPosition = (task: Task) => {
-    const totalDays = dateRange.length
-    const taskStartIndex = dateRange.findIndex((date) => date.toDateString() === task.startDate.toDateString())
-    const taskEndIndex = dateRange.findIndex((date) => date.toDateString() === task.endDate.toDateString())
-
-    if (taskStartIndex === -1 || taskEndIndex === -1) {
-      return { left: "0%", width: "0%" }
-    }
-
-    const left = (taskStartIndex / totalDays) * 100
-    const width = ((taskEndIndex - taskStartIndex + 1) / totalDays) * 100
-
-    return {
-      left: `${left}%`,
-      width: `${width}%`,
-    }
-  }
-
-  // サブタスク用のバー位置計算（完了状態に基づく）
-  const getSubTaskPosition = (parentTask: Task, subTaskIndex: number, isCompleted: boolean) => {
-    const parentPosition = getTaskPosition(parentTask)
-    const parentLeft = Number.parseFloat(parentPosition.left.replace("%", ""))
-    const parentWidth = Number.parseFloat(parentPosition.width.replace("%", ""))
-
-    // サブタスクは親タスクの期間内で均等に配置
-    const subTaskWidth = parentWidth * 0.8 // 親タスクの80%の幅
-    const subTaskLeft = parentLeft + parentWidth * 0.1 // 親タスクの10%オフセット
-
-    return {
-      left: `${subTaskLeft}%`,
-      width: `${subTaskWidth}%`,
-    }
-  }
-
-  // 進捗率に基づいてバーの色とグラデーションを決定
-  const getProgressBarStyle = (progress: number) => {
-    let darkColor = ""
-    let lightColor = ""
-
-    if (progress === 100) {
-      // 100%: ティール
-      darkColor = "#14b8a6" // teal-500
-      lightColor = "#5eead4" // teal-300
-    } else if (progress >= 80) {
-      // 80%以上: 青
-      darkColor = "#3b82f6" // blue-500
-      lightColor = "#93c5fd" // blue-300
-    } else if (progress >= 50) {
-      // 50%以上: 黄色
-      darkColor = "#eab308" // yellow-500
-      lightColor = "#fde047" // yellow-300
-    } else if (progress >= 20) {
-      // 20%以上: オレンジ
-      darkColor = "#f97316" // orange-500
-      lightColor = "#fdba74" // orange-300
-    } else {
-      // 20%未満: 赤
-      darkColor = "#ef4444" // red-500
-      lightColor = "#fca5a5" // red-300
-    }
-
-    // 進捗率に基づいてグラデーションを作成
-    const progressPercent = Math.max(0, Math.min(100, progress))
-
-    return {
-      background: `linear-gradient(to right, ${darkColor} 0%, ${darkColor} ${progressPercent}%, ${lightColor} ${progressPercent}%, ${lightColor} 100%)`,
-      transition: "all 0.3s ease",
-    }
-  }
-
-  // サブタスク用のスタイル（完了/未完了）
-  const getSubTaskStyle = (isCompleted: boolean) => {
-    if (isCompleted) {
-      return {
-        background: "#10b981", // green-500
-        transition: "all 0.3s ease",
-      }
-    } else {
-      return {
-        background: "#e5e7eb", // gray-200
-        transition: "all 0.3s ease",
-      }
-    }
-  }
-
-  // タスク名のスタイルを進捗率に応じて決定
-  const getTaskNameStyle = (progress: number) => {
-    if (progress === 100) {
-      return "font-semibold text-teal-600 text-xs truncate" // 100%完了時はティール色
-    }
-    return "font-semibold text-gray-800 text-xs truncate" // 通常時はグレー
-  }
-
-  const getDayOfWeek = (date: Date) => {
-    const days = ["日", "月", "火", "水", "木", "金", "土"]
-    return days[date.getDay()]
-  }
-
-  const isWeekend = (date: Date) => {
-    const day = date.getDay()
-    return day === 0 || day === 6
-  }
-
-  const isOpenDate = (date: Date) => {
-    return date.toDateString() === openDate.toDateString()
-  }
-
-  const dateColumnWidth = 40
-  const totalTimelineWidth = dateRange.length * dateColumnWidth
-  const taskNameColumnWidth = 380 // 320から380に変更
-
-  // 表示用のタスクリストを生成（サブタスクを含む）
-  const getDisplayTasks = () => {
-    const displayTasks: Array<{
-      type: "main" | "sub" | "add-sub"
-      task: Task
-      subTask?: any
-      subTaskIndex?: number
-    }> = []
-
-    // タスクを元の順序のまま追加（ソートしない）
-    tasks.forEach((task) => {
-      displayTasks.push({ type: "main", task })
-
-      if (expandedTasks.has(task.id)) {
-        if (task.subTasks) {
-          task.subTasks.forEach((subTask, index) => {
-            displayTasks.push({
-              type: "sub",
-              task,
-              subTask,
-              subTaskIndex: index,
-            })
-          })
-        }
-        displayTasks.push({ type: "add-sub", task })
-      }
-    })
-
-    return displayTasks
-  }
-
-  const displayTasks = getDisplayTasks()
-
-  // メインタスクの非表示（削除の代わり）
-  const hideMainTask = async (taskId: string) => {
-    try {
-      const taskToHide = tasks.find((task) => task.id === taskId)
-      if (!taskToHide) return
-
-      // 非表示タスクリストに追加
-      setHiddenTasks((prev) => [...prev, taskToHide])
-
-      // 表示中のタスクから削除
-      setTasks((prevTasks) => prevTasks.filter((task) => task.id !== taskId))
-
-      // 展開状態もクリア
-      const newExpandedTasks = new Set(expandedTasks)
-      newExpandedTasks.delete(taskId)
-      setExpandedTasks(newExpandedTasks)
-
-      console.log(`Task ${taskId} hidden locally`)
-    } catch (error) {
-      console.error("Failed to hide main task:", error)
-    }
-  }
-
-  // タスクを再表示する関数
-  const showTask = (taskId: string) => {
-    try {
-      const taskToShow = hiddenTasks.find((task) => task.id === taskId)
-      if (!taskToShow) return
-
-      // 表示中のタスクに追加
-      setTasks((prevTasks) => [...prevTasks, taskToShow])
-
-      // 非表示タスクリストから削除
-      setHiddenTasks((prev) => prev.filter((task) => task.id !== taskId))
-
-      console.log(`Task ${taskId} restored`)
-    } catch (error) {
-      console.error("Failed to show task:", error)
-    }
+        <div className="relative z-10 flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <h2 className="text-xl font-semibold text-gray-700 mb-2">ガントチャートを読み込み中...</h2>
+            <p className="text-gray-500">しばらくお待ちください</p>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 flex flex-col">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 relative overflow-hidden flex flex-col">
       {/* Background decorative elements */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-40 -right-40 w-80 h-80 bg-blue-400/10 rounded-full blur-3xl"></div>
@@ -671,803 +395,595 @@ export function GanttChart({
         <div className="absolute -bottom-40 right-1/3 w-80 h-80 bg-purple-400/10 rounded-full blur-3xl"></div>
       </div>
 
-      <GanttHeader />
-
-      <div className="flex-1 overflow-hidden flex flex-col relative z-10">
-        {/* Header */}
-        <div className="w-full flex items-center justify-between p-6 bg-white/70 backdrop-blur-md border-b border-blue-200/50 flex-shrink-0">
-          <Button
-            onClick={onBack}
-            variant="outline"
-            className="px-6 py-3 bg-white/70 backdrop-blur-md border-blue-200/50 text-blue-700 hover:bg-white/90 hover:border-blue-300 rounded-2xl transition-all duration-300 shadow-lg hover:shadow-xl"
-          >
-            ← 戻る
-          </Button>
-          <div className="text-center">
-            <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-              {project.name}
-            </h1>
-            <p className="text-lg text-gray-600 mt-1">{category}</p>
-            {project.openDate && (
-              <div className="flex items-center justify-center gap-2 mt-2">
-                <Flag className="h-4 w-4 text-yellow-500" />
-                <span className="text-sm font-semibold text-yellow-600 bg-yellow-50/80 backdrop-blur-sm px-3 py-1 rounded-full">
-                  洗車場OPEN予定: {project.openDate.getFullYear()}年{project.openDate.getMonth() + 1}月
-                  {project.openDate.getDate()}日
-                </span>
-              </div>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            {/* 非表示タスク管理ボタンを追加 */}
-            {hiddenTasks.length > 0 && (
-              <Dialog open={isHiddenTasksDialogOpen} onOpenChange={setIsHiddenTasksDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="bg-white/70 backdrop-blur-md border-orange-300/50 text-orange-600 hover:bg-orange-50/50 rounded-xl"
-                  >
-                    <EyeOff className="h-4 w-4 mr-1" />
-                    非表示 ({hiddenTasks.length})
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="sm:max-w-lg bg-white/95 backdrop-blur-md border-0 shadow-2xl">
-                  <DialogHeader className="pb-6">
-                    <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center">
-                        <Settings className="h-6 w-6 text-orange-600" />
-                      </div>
-                      <div>
-                        <DialogTitle className="text-xl font-semibold text-gray-900">非表示タスク管理</DialogTitle>
-                        <p className="text-sm text-gray-500 mt-1">非表示にしたタスクを再表示できます</p>
-                      </div>
-                    </div>
-                  </DialogHeader>
-                  <div className="space-y-4">
-                    <div className="space-y-2 max-h-64 overflow-y-auto">
-                      {hiddenTasks.map((task) => (
-                        <div
-                          key={task.id}
-                          className="flex items-center justify-between p-3 bg-gray-50/70 backdrop-blur-sm border border-gray-200/50 rounded-xl"
-                        >
-                          <div className="flex-1 min-w-0">
-                            <h3 className="font-medium text-gray-800 truncate">{task.name}</h3>
-                            {task.assignedPerson && (
-                              <p className="text-xs text-gray-500">
-                                担当: {task.assignedPerson.firstName} {task.assignedPerson.lastName}
-                              </p>
-                            )}
-                          </div>
-                          <Button
-                            size="sm"
-                            onClick={() => showTask(task.id)}
-                            className="flex-shrink-0 bg-green-600 hover:bg-green-700 text-white"
-                          >
-                            <Eye className="h-3 w-3 mr-1" />
-                            再表示
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </DialogContent>
-              </Dialog>
-            )}
-
-            {onRefresh && (
+      {/* Header */}
+      <header className="relative z-10 bg-white/80 backdrop-blur-md border-b border-blue-200/50 shadow-lg">
+        <div className="max-w-7xl mx-auto px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
               <Button
-                onClick={onRefresh}
+                onClick={onBack}
                 variant="outline"
-                size="sm"
-                disabled={loading}
-                className="bg-white/70 backdrop-blur-md border-green-300/50 text-green-600 hover:bg-green-50/50 rounded-xl"
+                className="px-4 py-2 bg-white/70 backdrop-blur-md border-blue-200/50 text-blue-700 hover:bg-white/90 hover:border-blue-300 rounded-xl transition-all duration-300"
               >
-                <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+                ← 戻る
               </Button>
-            )}
-          </div>
-        </div>
-
-        {/* Chart Header */}
-        <div className="w-full flex items-center gap-4 p-6 bg-white/50 backdrop-blur-md border-b border-blue-200/50">
-          <Calendar className="h-5 w-5 text-blue-600" />
-          <h2 className="text-lg font-semibold text-blue-800">ガントチャート</h2>
-
-          {/* メインタスク追加ボタンをヘッダーに配置 */}
-          <Dialog open={isAddingMainTask} onOpenChange={setIsAddingMainTask}>
-            <DialogTrigger asChild>
-              <button className="text-blue-600 hover:text-blue-800 font-medium text-sm transition-colors duration-200 flex items-center gap-1 bg-blue-50/50 px-3 py-1 rounded-xl">
-                <Plus className="h-4 w-4" />
-                メインタスクを追加
-              </button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-2xl bg-white/95 backdrop-blur-md border-0 shadow-2xl">
-              <DialogHeader className="pb-6">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
-                    <CalendarDays className="h-6 w-6 text-blue-600" />
-                  </div>
-                  <div>
-                    <DialogTitle className="text-xl font-semibold text-gray-900">新しいメインタスクを追加</DialogTitle>
-                    <p className="text-sm text-gray-500 mt-1">タスクの詳細情報を入力してください</p>
-                  </div>
-                </div>
-              </DialogHeader>
-
-              <div className="space-y-6">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-gray-700">
-                    タスク名 <span className="text-red-500">*</span>
-                  </label>
-                  <Input
-                    placeholder="例: 要件定義、設計書作成など..."
-                    value={newMainTask.name}
-                    onChange={(e) => setNewMainTask((prev) => ({ ...prev, name: e.target.value }))}
-                    className="h-12 text-base border-2 border-gray-200 focus:border-blue-500 rounded-xl"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700">
-                      開始日 <span className="text-red-500">*</span>
-                    </label>
-                    <Input
-                      type="date"
-                      value={newMainTask.startDate}
-                      onChange={(e) => setNewMainTask((prev) => ({ ...prev, startDate: e.target.value }))}
-                      className="h-12 text-base border-2 border-gray-200 focus:border-blue-500 rounded-xl"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700">
-                      終了日 <span className="text-red-500">*</span>
-                    </label>
-                    <Input
-                      type="date"
-                      value={newMainTask.endDate}
-                      onChange={(e) => setNewMainTask((prev) => ({ ...prev, endDate: e.target.value }))}
-                      className="h-12 text-base border-2 border-gray-200 focus:border-blue-500 rounded-xl"
-                    />
-                  </div>
-                </div>
-
-                {people.length > 0 && (
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700">担当者</label>
-                    <select
-                      value={newMainTask.assignedPersonId}
-                      onChange={(e) => setNewMainTask((prev) => ({ ...prev, assignedPersonId: e.target.value }))}
-                      className="w-full h-12 p-3 text-base border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    >
-                      <option value="">担当者を選択してください...</option>
-                      {people.map((person) => (
-                        <option key={person.id} value={person.id}>
-                          {person.firstName} {person.lastName}
-                        </option>
-                      ))}
-                    </select>
+              <div>
+                <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+                  {project.name} - {category}
+                </h1>
+                {project.openDate && (
+                  <div className="flex items-center gap-2 mt-1">
+                    <Flag className="h-4 w-4 text-red-500" />
+                    <span className="text-sm text-red-600 font-medium">
+                      OPEN予定: {project.openDate.getFullYear()}年{project.openDate.getMonth() + 1}月
+                      {project.openDate.getDate()}日
+                    </span>
                   </div>
                 )}
-
-                <div className="bg-blue-50 p-4 rounded-xl">
-                  <div className="flex items-center gap-2 text-sm text-blue-700">
-                    <CalendarDays className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                    <div>
-                      <p className="font-medium">タスク追加について</p>
-                      <p className="mt-1">
-                        追加されたタスクはリアルタイムで他のユーザーにも共有されます。サブタスクの追加や編集も可能です���
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setIsAddingMainTask(false)
-                      setNewMainTask({ name: "", startDate: "", endDate: "", assignedPersonId: "" })
-                    }}
-                    className="px-6 py-2 border-gray-300 text-gray-700 hover:bg-gray-50 rounded-xl"
-                  >
-                    キャンセル
-                  </Button>
-                  <Button
-                    onClick={addMainTask}
-                    disabled={!newMainTask.name.trim() || !newMainTask.startDate || !newMainTask.endDate}
-                    className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50 disabled:cursor-not-allowed rounded-xl"
-                  >
-                    <Check className="w-4 h-4 mr-2" />
-                    タスクを追加
-                  </Button>
-                </div>
               </div>
-            </DialogContent>
-          </Dialog>
+            </div>
 
-          {loading && (
-            <div className="flex items-center gap-2 text-sm text-blue-600">
-              <RefreshCw className="h-4 w-4 animate-spin" />
-              <span>データを読み込み中...</span>
-            </div>
-          )}
-          <div className="ml-auto flex items-center gap-6 text-sm text-gray-600">
-            <div className="flex items-center gap-2">
-              <Flag className="h-3 w-3 text-yellow-500" />
-              <span>OPEN日</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-teal-500 rounded-full"></div>
-              <span className="text-teal-600">完了タスク</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-gray-400 rounded-full"></div>
-              <span className="text-gray-600">未割り当てタスク</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-              <span>バーをクリックで展開・右クリックで編集</span>
-            </div>
-          </div>
-        </div>
+            <div className="flex items-center gap-3">
+              {onRefresh && (
+                <Button
+                  onClick={onRefresh}
+                  variant="outline"
+                  size="sm"
+                  className="px-3 py-2 bg-white/70 backdrop-blur-md border-blue-200/50 text-blue-700 hover:bg-white/90 hover:border-blue-300 rounded-xl transition-all duration-300"
+                >
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  更新
+                </Button>
+              )}
 
-        {/* Loading State */}
-        {loading && (
-          <div className="flex-1 flex items-center justify-center">
-            <div className="text-center">
-              <RefreshCw className="h-8 w-8 animate-spin text-blue-500 mx-auto mb-4" />
-              <p className="text-gray-600">データを読み込んでいます...</p>
-            </div>
-          </div>
-        )}
-
-        {/* No Tasks State */}
-        {!loading && tasks.length === 0 && (
-          <div className="flex-1 flex items-center justify-center">
-            <div className="text-center">
-              <Calendar className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-600 mb-2">このカテゴリーにはタスクがありません</p>
-              <p className="text-sm text-gray-500">「メインタスクを追加」ボタンからタスクを作成してください</p>
-              {hiddenTasks.length > 0 && (
-                <p className="text-sm text-orange-600 mt-2">{hiddenTasks.length}個の非表示タスクがあります</p>
+              {onAddTask && (
+                <Dialog open={isAddTaskOpen} onOpenChange={setIsAddTaskOpen}>
+                  <DialogTrigger asChild>
+                    <Button className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-all duration-300">
+                      <Plus className="h-4 w-4 mr-2" />
+                      タスク追加
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-lg bg-white/95 backdrop-blur-md border-0 shadow-2xl">
+                    <DialogHeader>
+                      <DialogTitle className="text-xl font-semibold text-gray-900">新しいタスクを追加</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="taskName">タスク名 *</Label>
+                        <Input
+                          id="taskName"
+                          value={newTaskForm.name}
+                          onChange={(e) => setNewTaskForm({ ...newTaskForm, name: e.target.value })}
+                          placeholder="タスク名を入力"
+                          className="h-10"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="startDate">開始日 *</Label>
+                          <Input
+                            id="startDate"
+                            type="date"
+                            value={newTaskForm.startDate}
+                            onChange={(e) => setNewTaskForm({ ...newTaskForm, startDate: e.target.value })}
+                            className="h-10"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="endDate">終了日 *</Label>
+                          <Input
+                            id="endDate"
+                            type="date"
+                            value={newTaskForm.endDate}
+                            onChange={(e) => setNewTaskForm({ ...newTaskForm, endDate: e.target.value })}
+                            className="h-10"
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="assignedPerson">担当者</Label>
+                        <select
+                          id="assignedPerson"
+                          value={newTaskForm.assignedPersonId}
+                          onChange={(e) => setNewTaskForm({ ...newTaskForm, assignedPersonId: e.target.value })}
+                          className="w-full h-10 px-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          <option value="">担当者を選択</option>
+                          {people.map((person) => (
+                            <option key={person.id} value={person.id}>
+                              {person.firstName} {person.lastName}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="flex justify-end gap-3 pt-4">
+                        <Button variant="outline" onClick={() => setIsAddTaskOpen(false)} className="px-4 py-2">
+                          キャンセル
+                        </Button>
+                        <Button
+                          onClick={handleAddTask}
+                          disabled={!newTaskForm.name || !newTaskForm.startDate || !newTaskForm.endDate}
+                          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white"
+                        >
+                          追加
+                        </Button>
+                      </div>
+                    </div>
+                  </DialogContent>
+                </Dialog>
               )}
             </div>
           </div>
-        )}
+        </div>
+      </header>
 
-        {/* Gantt Chart - Fixed Layout */}
-        {!loading && tasks.length > 0 && (
-          <div className="flex-1 flex flex-col overflow-hidden">
-            {/* Month Header Row */}
-            <div className="flex border-b border-gray-300 flex-shrink-0">
-              {/* Fixed Task Name Header */}
-              <div
-                className="bg-white/70 backdrop-blur-md border-r border-gray-300 p-2 font-semibold text-gray-700 flex items-center text-sm flex-shrink-0"
-                style={{ width: `${taskNameColumnWidth}px` }}
-              >
-                期間
-              </div>
-              {/* Scrollable Month Header */}
-              <div
-                ref={monthHeaderScrollRef}
-                className="flex-1 overflow-x-auto overflow-y-hidden scrollbar-hide"
-                onScroll={handleMonthHeaderScroll}
-                style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
-              >
-                <div className="bg-white/70 backdrop-blur-md flex" style={{ width: `${totalTimelineWidth}px` }}>
-                  {monthHeaders.map((header, index) => (
-                    <div
-                      key={index}
-                      className="bg-blue-100/70 backdrop-blur-sm border-r border-gray-300 p-2 text-center text-sm font-bold text-blue-800 flex-shrink-0"
-                      style={{ width: `${header.span * dateColumnWidth}px` }}
-                    >
-                      {header.month}
-                    </div>
-                  ))}
-                </div>
+      {/* Main Content */}
+      <div className="relative z-10 flex-1 p-6">
+        <Card className="bg-white/80 backdrop-blur-md border-blue-200/50 shadow-xl rounded-2xl overflow-hidden">
+          <CardHeader className="pb-4">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-lg font-semibold text-gray-800">
+                ガントチャート - {tasks.length}個のタスク
+              </CardTitle>
+              <div className="flex items-center gap-2 text-sm text-gray-600">
+                <BarChart3 className="h-4 w-4" />
+                <span>期間: {dateRange.totalDays}日間</span>
               </div>
             </div>
+          </CardHeader>
 
-            {/* Date Header Row */}
-            <div className="flex border-b border-gray-300 flex-shrink-0">
-              {/* Fixed Task Name Header */}
-              <div
-                className="bg-white/70 backdrop-blur-md border-r border-gray-300 p-3 font-semibold text-gray-700 flex items-center flex-shrink-0"
-                style={{ width: `${taskNameColumnWidth}px` }}
-              >
-                タスク名
-              </div>
-              {/* Scrollable Date Header */}
-              <div
-                ref={dateHeaderScrollRef}
-                className="flex-1 overflow-x-auto overflow-y-hidden scrollbar-hide"
-                onScroll={handleDateHeaderScroll}
-                style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
-              >
-                <div className="bg-white/70 backdrop-blur-md flex" style={{ width: `${totalTimelineWidth}px` }}>
-                  {dateRange.map((date, index) => (
-                    <div
-                      key={index}
-                      className={`p-2 text-center text-xs font-medium border-r border-gray-300 flex-shrink-0 ${
-                        isOpenDate(date)
-                          ? "bg-yellow-100/80 backdrop-blur-sm text-yellow-700 font-bold"
-                          : isWeekend(date)
-                            ? "bg-red-50/80 backdrop-blur-sm text-red-600"
-                            : "text-gray-600"
-                      }`}
-                      style={{ width: `${dateColumnWidth}px` }}
-                    >
-                      <div className="mb-1 font-bold">{date.getDate()}</div>
-                      <div
-                        className={`text-xs mb-1 ${
-                          isOpenDate(date) ? "text-yellow-600" : isWeekend(date) ? "text-red-500" : "text-gray-500"
-                        }`}
-                      >
-                        {getDayOfWeek(date)}
-                      </div>
-                      <div className="text-xs text-gray-400">{getRokuyo(date)}</div>
-                      {isOpenDate(date) && (
-                        <div className="flex justify-center mt-1">
-                          <Flag className="h-3 w-3 text-yellow-500" />
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Tasks Content */}
-            <div className="flex-1 flex overflow-hidden">
-              {/* Fixed Task Names Column */}
-              <div
-                ref={taskNameScrollRef}
-                className="bg-white/70 backdrop-blur-md border-r border-gray-300 flex-shrink-0 overflow-y-auto"
-                style={{ width: `${taskNameColumnWidth}px` }}
-              >
-                {displayTasks.map((item, index) => (
-                  <div
-                    key={`${item.type}-${item.task.id}-${item.subTaskIndex || 0}`}
-                    className={`border-b border-gray-200 h-12 flex items-center group ${
-                      item.type === "sub"
-                        ? "bg-gray-50/70 backdrop-blur-sm"
-                        : item.type === "add-sub"
-                          ? "bg-blue-50/70 backdrop-blur-sm"
-                          : ""
-                    }`}
+          <CardContent className="p-0">
+            {tasks.length === 0 ? (
+              <div className="text-center py-16">
+                <Calendar className="mx-auto h-16 w-16 text-gray-400 mb-4" />
+                <h3 className="text-lg font-medium text-gray-600 mb-2">タスクがありません</h3>
+                <p className="text-gray-500 mb-6">{category}カテゴリーにはまだタスクが登録されていません。</p>
+                {onAddTask && (
+                  <Button
+                    onClick={() => setIsAddTaskOpen(true)}
+                    className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl"
                   >
-                    {item.type === "main" && (
-                      <div className="p-3 flex items-center justify-between w-full">
-                        <div className="flex items-center gap-3 flex-1 min-w-0">
-                          {/* 展開/折りたたみアイコン */}
-                          {item.task.subTasks && item.task.subTasks.length > 0 && (
-                            <button
-                              onClick={() => handleTaskBarClick(item.task.id)}
-                              className="flex-shrink-0 p-1 hover:bg-gray-200 rounded transition-colors"
-                            >
-                              {expandedTasks.has(item.task.id) ? (
-                                <ChevronDown className="h-3 w-3 text-gray-600" />
-                              ) : (
-                                <ChevronRight className="h-3 w-3 text-gray-600" />
-                              )}
-                            </button>
-                          )}
-
-                          <div className="flex-1 min-w-0 flex items-center gap-2">
-                            <h3 className={getTaskNameStyle(item.task.progress)}>{item.task.name}</h3>
-
-                            {/* 進捗率インジケーターを追加 */}
-                            <div className="flex items-center gap-2 flex-shrink-0">
-                              {/* 進捗率バッジ */}
-                              <div
-                                className={`px-2 py-0.5 rounded-full text-xs font-bold transition-all duration-300 ${
-                                  item.task.progress === 100
-                                    ? "bg-teal-100 text-teal-700 border border-teal-300"
-                                    : item.task.progress >= 80
-                                      ? "bg-blue-100 text-blue-700 border border-blue-300"
-                                      : item.task.progress >= 50
-                                        ? "bg-yellow-100 text-yellow-700 border border-yellow-300"
-                                        : item.task.progress >= 20
-                                          ? "bg-orange-100 text-orange-700 border border-orange-300"
-                                          : "bg-red-100 text-red-700 border border-red-300"
-                                }`}
-                              >
-                                {item.task.progress}%
-                              </div>
-
-                              {/* ミニプログレスバー */}
-                              <div className="w-12 h-2 bg-gray-200 rounded-full overflow-hidden flex-shrink-0">
-                                <div
-                                  className={`h-full transition-all duration-500 ease-out ${
-                                    item.task.progress === 100
-                                      ? "bg-teal-500"
-                                      : item.task.progress >= 80
-                                        ? "bg-blue-500"
-                                        : item.task.progress >= 50
-                                          ? "bg-yellow-500"
-                                          : item.task.progress >= 20
-                                            ? "bg-orange-500"
-                                            : "bg-red-500"
-                                  }`}
-                                  style={{ width: `${item.task.progress}%` }}
-                                />
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          {/* 担当者名または未割り当て表示 */}
-                          {item.task.assignedPerson ? (
-                            <div className="text-xs text-gray-600">
-                              {item.task.assignedPerson.firstName} {item.task.assignedPerson.lastName}
-                            </div>
-                          ) : (
-                            <div className="text-xs text-gray-400">未割り当て</div>
-                          )}
-
-                          {/* 担当者割り当て/変更ボタン */}
-                          <button
-                            onClick={() => openAssignDialog(item.task.id)}
-                            className="p-1 hover:bg-blue-100 rounded transition-colors text-blue-500 hover:text-blue-700 opacity-0 group-hover:opacity-100"
-                            title={item.task.assignedPerson ? "担当者を変更" : "担当者を割り当て"}
-                          >
-                            <UserPlus className="h-3 w-3" />
-                          </button>
-
-                          {/* タスク非表示ボタン */}
-                          {!item.task.id.startsWith("sheet-") && (
-                            <button
-                              onClick={() => hideMainTask(item.task.id)}
-                              className="p-1 hover:bg-gray-100 rounded transition-colors text-gray-500 hover:text-gray-700 opacity-0 group-hover:opacity-100"
-                              title="メインタスクを非表示"
-                            >
-                              <EyeOff className="h-3 w-3" />
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    )}
-
-                    {item.type === "sub" && (
-                      <div className="p-3 flex items-center justify-between w-full">
-                        <div className="flex items-center gap-3 flex-1 min-w-0">
-                          <div className="w-6"></div> {/* インデント */}
-                          {/* 完了チェックボックス */}
-                          <button
-                            onClick={() => toggleSubTaskCompletion(item.task.id, item.subTask.id)}
-                            className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-all duration-200 flex-shrink-0 ${
-                              item.subTask.completed
-                                ? "bg-green-500 border-green-500 text-white"
-                                : "border-gray-300 hover:border-green-400"
+                    <Plus className="h-4 w-4 mr-2" />
+                    最初のタスクを追加
+                  </Button>
+                )}
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <div className="min-w-[1200px]">
+                  {/* Calendar Header */}
+                  <div className="flex border-b border-gray-200">
+                    <div className="w-80 bg-gray-50 border-r border-gray-200 p-4">
+                      <h3 className="font-medium text-gray-700">タスク名</h3>
+                    </div>
+                    <div className="flex-1 bg-gray-50">
+                      <div className="flex">
+                        {calendarHeaders.map((header, index) => (
+                          <div
+                            key={index}
+                            className={`flex-1 min-w-[30px] p-2 text-center text-xs border-r border-gray-200 ${
+                              header.isWeekend ? "bg-gray-100" : ""
+                            } ${header.isToday ? "bg-blue-100 text-blue-700 font-medium" : ""} ${
+                              header.isOpenDate ? "bg-red-100 text-red-700 font-bold" : ""
                             }`}
                           >
-                            {item.subTask.completed && <Check className="h-2 w-2" />}
-                          </button>
-                          <div className="flex-1 min-w-0">
-                            {editingSubTask?.taskId === item.task.id &&
-                            editingSubTask?.subTaskId === item.subTask.id ? (
-                              <div className="flex items-center gap-2">
-                                <Input
-                                  value={editSubTaskName}
-                                  onChange={(e) => setEditSubTaskName(e.target.value)}
-                                  className="h-6 text-xs"
-                                  onKeyDown={(e) => {
-                                    if (e.key === "Enter") {
-                                      updateSubTaskName(item.task.id, item.subTask.id, editSubTaskName)
-                                    } else if (e.key === "Escape") {
-                                      setEditingSubTask(null)
-                                      setEditSubTaskName("")
-                                    }
-                                  }}
-                                  autoFocus
-                                />
+                            <div className="font-medium">{header.day}</div>
+                            <div className="text-gray-500">{header.month}</div>
+                            {header.isOpenDate && <div className="text-red-600 text-xs font-bold mt-1">OPEN</div>}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Gantt Rows */}
+                  <div className="divide-y divide-gray-200">
+                    {ganttItems.map((item, index) => (
+                      <div key={`${item.task.id}-${item.subTask?.id || "main"}`} className="flex">
+                        {/* Task Name Column */}
+                        <div className="w-80 border-r border-gray-200 p-4 bg-white">
+                          {item.type === "task" ? (
+                            <div className="flex items-center gap-2">
+                              {/* Expand/Collapse Button */}
+                              {item.task.subTasks && item.task.subTasks.length > 0 && (
                                 <Button
+                                  variant="ghost"
                                   size="sm"
-                                  onClick={() => updateSubTaskName(item.task.id, item.subTask.id, editSubTaskName)}
-                                  className="h-6 w-6 p-0"
+                                  onClick={() => toggleTaskExpansion(item.task.id)}
+                                  className="p-1 h-6 w-6"
                                 >
-                                  <Check className="h-3 w-3" />
+                                  {expandedTasks.has(item.task.id) ? (
+                                    <ChevronDown className="h-3 w-3" />
+                                  ) : (
+                                    <ChevronRight className="h-3 w-3" />
+                                  )}
                                 </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => {
-                                    setEditingSubTask(null)
-                                    setEditSubTaskName("")
-                                  }}
-                                  className="h-6 w-6 p-0"
-                                >
-                                  <X className="h-3 w-3" />
-                                </Button>
-                              </div>
-                            ) : (
-                              <div className="relative group">
+                              )}
+
+                              {/* Task Name with Hover */}
+                              <div className="relative group flex-1 min-w-0">
                                 <h3
-                                  className={`text-xs cursor-pointer hover:bg-gray-100 px-1 py-0.5 rounded transition-colors ${
-                                    item.subTask.completed ? "line-through text-gray-500" : "text-gray-600"
-                                  }`}
-                                  onContextMenu={(e) => handleContextMenu(e, item.task.id, item.subTask.id)}
-                                  onDoubleClick={() =>
-                                    startEditingSubTask(item.task.id, item.subTask.id, item.subTask.name)
-                                  }
+                                  className={`${getTaskNameStyle(item.task.progress)} cursor-default`}
                                   style={{
                                     display: "-webkit-box",
                                     WebkitLineClamp: 1,
                                     WebkitBoxOrient: "vertical",
                                     overflow: "hidden",
                                     textOverflow: "ellipsis",
-                                    maxWidth: "280px",
                                   }}
-                                  title={`└ ${item.subTask.name}`}
                                 >
-                                  └ {item.subTask.name}
+                                  {item.task.name}
                                 </h3>
 
-                                {/* 長いテキストの場合のツールチップ */}
-                                {item.subTask.name.length > 25 && (
-                                  <div className="absolute left-0 top-full mt-1 bg-gray-800 text-white text-xs px-2 py-1 rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-50 max-w-xs break-words pointer-events-none">
+                                {/* ホバー時のフルネーム表示 - メインタスク用 */}
+                                {item.task.name.length > 25 && (
+                                  <div className="absolute left-0 top-full mt-1 bg-gray-800 text-white text-xs px-2 py-1 rounded shadow-lg z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap max-w-xs">
+                                    {item.task.name}
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Task Actions */}
+                              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                {/* Hide/Show Button */}
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => toggleTaskVisibility(item.task.id)}
+                                  className="p-1 h-6 w-6"
+                                >
+                                  {hiddenTasks.has(item.task.id) ? (
+                                    <EyeOff className="h-3 w-3" />
+                                  ) : (
+                                    <Eye className="h-3 w-3" />
+                                  )}
+                                </Button>
+
+                                {/* Add SubTask Button */}
+                                {onAddSubTask && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => openAddSubTask(item.task)}
+                                    className="p-1 h-6 w-6"
+                                  >
+                                    <Plus className="h-3 w-3" />
+                                  </Button>
+                                )}
+
+                                {/* Edit Button */}
+                                {onUpdateTask && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => openEditTask(item.task)}
+                                    className="p-1 h-6 w-6"
+                                  >
+                                    <Edit3 className="h-3 w-3" />
+                                  </Button>
+                                )}
+
+                                {/* Delete Button */}
+                                {onDeleteTask && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => openDeleteTask(item.task)}
+                                    className="p-1 h-6 w-6 text-red-600 hover:text-red-700"
+                                  >
+                                    <Trash2 className="h-3 w-3" />
+                                  </Button>
+                                )}
+                              </div>
+
+                              {/* Assigned Person */}
+                              {item.task.assignedPerson && (
+                                <div className="flex items-center gap-1 ml-2">
+                                  <div
+                                    className={`w-4 h-4 rounded-full ${item.task.assignedPerson.bgColor} flex items-center justify-center`}
+                                  >
+                                    <User className="h-2 w-2 text-white" />
+                                  </div>
+                                  <span className="text-xs text-gray-600">{item.task.assignedPerson.firstName}</span>
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2 ml-6 group">
+                              {/* SubTask Checkbox */}
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => item.subTask && handleSubTaskToggle(item.subTask)}
+                                className="p-1 h-5 w-5"
+                              >
+                                {item.subTask?.completed ? (
+                                  <Check className="h-3 w-3 text-green-600" />
+                                ) : (
+                                  <div className="h-3 w-3 border border-gray-400 rounded-sm"></div>
+                                )}
+                              </Button>
+
+                              {/* SubTask Name with Hover */}
+                              <div className="relative group flex-1 min-w-0">
+                                <h3
+                                  className={`text-sm ${
+                                    item.subTask?.completed ? "text-green-600 line-through" : "text-gray-600"
+                                  } cursor-default`}
+                                  style={{
+                                    display: "-webkit-box",
+                                    WebkitLineClamp: 1,
+                                    WebkitBoxOrient: "vertical",
+                                    overflow: "hidden",
+                                    textOverflow: "ellipsis",
+                                  }}
+                                >
+                                  └ {item.subTask?.name}
+                                </h3>
+
+                                {/* ホバー時のフルネーム表示 - サブタスク用 */}
+                                {item.subTask && item.subTask.name.length > 20 && (
+                                  <div className="absolute left-0 top-full mt-1 bg-gray-700 text-white text-xs px-2 py-1 rounded shadow-lg z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap max-w-xs">
                                     └ {item.subTask.name}
                                   </div>
                                 )}
                               </div>
-                            )}
-                          </div>
+
+                              {/* SubTask Actions */}
+                              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                {/* Edit SubTask Button */}
+                                {onUpdateSubTask && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => item.subTask && openEditSubTask(item.subTask)}
+                                    className="p-1 h-5 w-5"
+                                  >
+                                    <Edit3 className="h-2 w-2" />
+                                  </Button>
+                                )}
+
+                                {/* Delete SubTask Button */}
+                                {onDeleteSubTask && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => item.subTask && openDeleteSubTask(item.subTask)}
+                                    className="p-1 h-5 w-5 text-red-600 hover:text-red-700"
+                                  >
+                                    <Trash2 className="h-2 w-2" />
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                          )}
                         </div>
 
-                        {/* メニューボタンのみ */}
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                          <button
-                            onClick={(e) => handleContextMenu(e, item.task.id, item.subTask.id)}
-                            className="p-1 hover:bg-gray-200 rounded transition-colors opacity-0 group-hover:opacity-100 flex-shrink-0"
-                          >
-                            <MoreVertical className="h-3 w-3 text-gray-500" />
-                          </button>
-                        </div>
-                      </div>
-                    )}
+                        {/* Gantt Chart Column */}
+                        <div className="flex-1 relative h-12 bg-white">
+                          {item.type === "task" ? (
+                            <div className="relative h-full">
+                              {/* Task Bar */}
+                              <div
+                                className={`absolute top-2 h-8 ${getProgressColor(
+                                  item.task.progress,
+                                )} rounded-md shadow-sm flex items-center justify-center text-white text-xs font-medium`}
+                                style={calculateTaskPosition(item.task.startDate, item.task.endDate)}
+                              >
+                                {item.task.progress > 0 && `${item.task.progress}%`}
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="relative h-full">
+                              {/* SubTask Bar */}
+                              <div
+                                className={`absolute top-3 h-6 ${
+                                  item.subTask?.completed ? "bg-green-400" : "bg-gray-300"
+                                } rounded-sm shadow-sm`}
+                                style={calculateTaskPosition(item.task.startDate, item.task.endDate)}
+                              ></div>
+                            </div>
+                          )}
 
-                    {item.type === "add-sub" && (
-                      <div className="p-3 flex items-center gap-3 w-full">
-                        <div className="w-6"></div> {/* インデント */}
-                        <Plus className="h-3 w-3 text-blue-500 flex-shrink-0" />
-                        <Input
-                          placeholder="新しいサブタスクを追加..."
-                          value={newSubTaskName}
-                          onChange={(e) => setNewSubTaskName(e.target.value)}
-                          className="h-6 text-xs flex-1"
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              addSubTask(item.task.id)
+                          {/* Today Line */}
+                          {(() => {
+                            const today = new Date()
+                            const todayOffset = Math.floor(
+                              (today.getTime() - dateRange.startDate.getTime()) / (24 * 60 * 60 * 1000),
+                            )
+                            if (todayOffset >= 0 && todayOffset <= dateRange.totalDays) {
+                              return (
+                                <div
+                                  className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-10"
+                                  style={{ left: `${(todayOffset / dateRange.totalDays) * 100}%` }}
+                                ></div>
+                              )
                             }
-                          }}
-                        />
-                        <Button
-                          size="sm"
-                          onClick={() => addSubTask(item.task.id)}
-                          disabled={!newSubTaskName.trim()}
-                          className="h-6 px-2 text-xs"
-                        >
-                          追加
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
+                            return null
+                          })()}
 
-              {/* Scrollable Timeline Column */}
-              <div ref={contentScrollRef} className="flex-1 overflow-auto" onScroll={handleContentScroll}>
-                <div style={{ width: `${totalTimelineWidth}px` }}>
-                  {displayTasks.map((item, index) => (
-                    <div
-                      key={`timeline-${item.type}-${item.task.id}-${item.subTaskIndex || 0}`}
-                      className={`border-b border-gray-200 h-12 relative ${
-                        item.type === "sub"
-                          ? "bg-gray-50/70 backdrop-blur-sm"
-                          : item.type === "add-sub"
-                            ? "bg-blue-50/70 backdrop-blur-sm"
-                            : ""
-                      }`}
-                    >
-                      {/* Vertical Grid Lines */}
-                      <div className="absolute inset-0 flex">
-                        {dateRange.map((date, dateIndex) => (
-                          <div
-                            key={dateIndex}
-                            className="border-r border-gray-200 flex-shrink-0 h-full"
-                            style={{ width: `${dateColumnWidth}px` }}
-                          />
-                        ))}
-                      </div>
-
-                      {/* Task Bar Container */}
-                      <div className="relative w-full h-full flex items-center">
-                        {item.type === "main" && (
-                          /* Main Task Bar */
-                          <div
-                            className="absolute cursor-pointer transition-all duration-200 rounded-full border border-gray-200 shadow-sm hover:shadow-md"
-                            style={{
-                              ...getTaskPosition(item.task),
-                              ...getProgressBarStyle(item.task.progress),
-                              top: "2px",
-                              bottom: "2px",
-                              height: "auto",
-                            }}
-                            onClick={() => handleTaskBarClick(item.task.id)}
-                            title={`${item.task.name} (${item.task.progress}%完了) - クリックでサブタスク表示`}
-                          >
-                            {/* Progress Percentage Label */}
-                            <div className="absolute inset-0 flex items-center justify-center text-xs font-bold text-white drop-shadow-sm">
-                              {item.task.progress}%
-                            </div>
-                          </div>
-                        )}
-
-                        {item.type === "sub" && (
-                          /* Sub Task Bar */
-                          <div
-                            className="absolute transition-all duration-200 rounded-full border border-gray-300 cursor-pointer hover:shadow-sm"
-                            style={{
-                              ...getSubTaskPosition(item.task, item.subTaskIndex!, item.subTask?.completed),
-                              ...getSubTaskStyle(item.subTask?.completed),
-                              top: "4px",
-                              bottom: "4px",
-                              height: "auto",
-                            }}
-                            onClick={() => toggleSubTaskCompletion(item.task.id, item.subTask.id)}
-                            onContextMenu={(e) => handleContextMenu(e, item.task.id, item.subTask.id)}
-                            title={`${item.subTask?.name} - ${item.subTask?.completed ? "完了" : "未完了"} (クリックで切り替え)`}
-                          >
-                            {/* Completion Status */}
-                            <div className="absolute inset-0 flex items-center justify-center text-xs font-medium text-white">
-                              {item.subTask?.completed ? "✓" : "○"}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* 担当者割り当てダイアログ */}
-        <Dialog open={isAssignDialogOpen} onOpenChange={setIsAssignDialogOpen}>
-          <DialogContent className="sm:max-w-lg bg-white/95 backdrop-blur-md border-0 shadow-2xl">
-            <DialogHeader className="pb-6">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
-                  <Users className="h-6 w-6 text-blue-600" />
-                </div>
-                <div>
-                  <DialogTitle className="text-xl font-semibold text-gray-900">担当者を選択</DialogTitle>
-                  <p className="text-sm text-gray-500 mt-1">このタスクの担当者を選択してください</p>
-                </div>
-              </div>
-            </DialogHeader>
-            <div className="space-y-4">
-              {people.length === 0 ? (
-                <div className="text-center py-8">
-                  <Users className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-                  <p className="text-gray-500">担当者がいません</p>
-                  <p className="text-sm text-gray-400 mt-1">まず担当者を追加してください</p>
-                </div>
-              ) : (
-                <div className="space-y-2 max-h-64 overflow-y-auto">
-                  {people.map((person) => (
-                    <Button
-                      key={person.id}
-                      variant="outline"
-                      className="w-full justify-start h-14 bg-white/70 backdrop-blur-sm border-gray-200/50 hover:bg-white/90 hover:border-blue-300 transition-all duration-200 rounded-xl"
-                      onClick={() => assignPersonToTask(assigningTaskId!, person.id)}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className={`w-6 h-6 rounded-full ${person.bgColor} flex items-center justify-center`}>
-                          <User className="h-3 w-3 text-white" />
+                          {/* OPEN Date Line */}
+                          {project.openDate &&
+                            (() => {
+                              const openOffset = Math.floor(
+                                (project.openDate.getTime() - dateRange.startDate.getTime()) / (24 * 60 * 60 * 1000),
+                              )
+                              if (openOffset >= 0 && openOffset <= dateRange.totalDays) {
+                                return (
+                                  <div
+                                    className="absolute top-0 bottom-0 w-0.5 bg-red-600 z-10"
+                                    style={{ left: `${(openOffset / dateRange.totalDays) * 100}%` }}
+                                  ></div>
+                                )
+                              }
+                              return null
+                            })()}
                         </div>
-                        <span className="text-base font-medium">
-                          {person.firstName} {person.lastName}
-                        </span>
                       </div>
-                    </Button>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              )}
-            </div>
-          </DialogContent>
-        </Dialog>
-
-        {/* Context Menu */}
-        {showContextMenu && (
-          <div
-            className="fixed bg-white/95 backdrop-blur-md border border-gray-200 rounded-xl shadow-2xl py-2 z-50"
-            style={{
-              left: showContextMenu.x,
-              top: showContextMenu.y,
-            }}
-            onMouseLeave={() => setShowContextMenu(null)}
-          >
-            {showContextMenu.subTaskId ? (
-              // サブタスク用メニュー
-              <>
-                <button
-                  className="w-full px-4 py-2 text-left text-sm hover:bg-blue-50 flex items-center gap-2 transition-colors"
-                  onClick={() => {
-                    const task = tasks.find((t) => t.id === showContextMenu.taskId)
-                    const subTask = task?.subTasks?.find((st) => st.id === showContextMenu.subTaskId)
-                    if (subTask && showContextMenu.subTaskId) {
-                      startEditingSubTask(showContextMenu.taskId, showContextMenu.subTaskId, subTask.name)
-                    }
-                  }}
-                >
-                  <Edit3 className="h-3 w-3" />
-                  名前を編集
-                </button>
-                <button
-                  className="w-full px-4 py-2 text-left text-sm hover:bg-red-50 text-red-600 flex items-center gap-2 transition-colors"
-                  onClick={() => {
-                    if (showContextMenu.subTaskId) {
-                      deleteSubTask(showContextMenu.taskId, showContextMenu.subTaskId)
-                    }
-                    setShowContextMenu(null)
-                  }}
-                >
-                  <Trash2 className="h-3 w-3" />
-                  削除
-                </button>
-              </>
-            ) : (
-              // メインタスク用メニュー
-              <>
-                <button
-                  className="w-full px-4 py-2 text-left text-sm hover:bg-blue-50 flex items-center gap-2 transition-colors"
-                  onClick={() => {
-                    setEditingTaskId(showContextMenu.taskId)
-                    setShowContextMenu(null)
-                  }}
-                >
-                  <Plus className="h-3 w-3" />
-                  サブタスクを追加
-                </button>
-                <button
-                  className="w-full px-4 py-2 text-left text-sm hover:bg-blue-50 flex items-center gap-2 transition-colors"
-                  onClick={() => {
-                    openAssignDialog(showContextMenu.taskId)
-                    setShowContextMenu(null)
-                  }}
-                >
-                  <UserPlus className="h-3 w-3" />
-                  担当者を割り当て
-                </button>
-                <button
-                  className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 text-gray-600 flex items-center gap-2 transition-colors"
-                  onClick={() => {
-                    hideMainTask(showContextMenu.taskId)
-                    setShowContextMenu(null)
-                  }}
-                >
-                  <EyeOff className="h-3 w-3" />
-                  メインタスクを非表示
-                </button>
-              </>
+              </div>
             )}
-          </div>
-        )}
-
-        <style jsx>{`
-          .scrollbar-hide::-webkit-scrollbar {
-            display: none;
-          }
-          .group:hover .group-hover\\:opacity-100 {
-            opacity: 1;
-          }
-        `}</style>
+          </CardContent>
+        </Card>
       </div>
+
+      {/* Edit Task Dialog */}
+      <Dialog open={isEditTaskOpen} onOpenChange={setIsEditTaskOpen}>
+        <DialogContent className="sm:max-w-lg bg-white/95 backdrop-blur-md border-0 shadow-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-semibold text-gray-900">タスクを編集</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="editTaskName">タスク名 *</Label>
+              <Input
+                id="editTaskName"
+                value={editTaskForm.name}
+                onChange={(e) => setEditTaskForm({ ...editTaskForm, name: e.target.value })}
+                placeholder="タスク名を入力"
+                className="h-10"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="editAssignedPerson">担当者</Label>
+              <select
+                id="editAssignedPerson"
+                value={editTaskForm.assignedPersonId}
+                onChange={(e) => setEditTaskForm({ ...editTaskForm, assignedPersonId: e.target.value })}
+                className="w-full h-10 px-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">担当者を選択</option>
+                {people.map((person) => (
+                  <option key={person.id} value={person.id}>
+                    {person.firstName} {person.lastName}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex justify-end gap-3 pt-4">
+              <Button variant="outline" onClick={() => setIsEditTaskOpen(false)} className="px-4 py-2">
+                キャンセル
+              </Button>
+              <Button
+                onClick={handleEditTask}
+                disabled={!editTaskForm.name}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                更新
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Task Dialog */}
+      <Dialog open={isDeleteTaskOpen} onOpenChange={setIsDeleteTaskOpen}>
+        <DialogContent className="sm:max-w-lg bg-white/95 backdrop-blur-md border-0 shadow-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-semibold text-gray-900">タスクを削除</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-gray-600">「{selectedTask?.name}」を削除しますか？この操作は取り消せません。</p>
+            <div className="flex justify-end gap-3 pt-4">
+              <Button variant="outline" onClick={() => setIsDeleteTaskOpen(false)} className="px-4 py-2">
+                キャンセル
+              </Button>
+              <Button onClick={handleDeleteTask} className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white">
+                削除
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add SubTask Dialog */}
+      <Dialog open={isAddSubTaskOpen} onOpenChange={setIsAddSubTaskOpen}>
+        <DialogContent className="sm:max-w-lg bg-white/95 backdrop-blur-md border-0 shadow-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-semibold text-gray-900">サブタスクを追加</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="subTaskName">サブタスク名 *</Label>
+              <Input
+                id="subTaskName"
+                value={newSubTaskName}
+                onChange={(e) => setNewSubTaskName(e.target.value)}
+                placeholder="サブタスク名を入力"
+                className="h-10"
+              />
+            </div>
+            <div className="flex justify-end gap-3 pt-4">
+              <Button variant="outline" onClick={() => setIsAddSubTaskOpen(false)} className="px-4 py-2">
+                キャンセル
+              </Button>
+              <Button
+                onClick={handleAddSubTask}
+                disabled={!newSubTaskName}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                追加
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit SubTask Dialog */}
+      <Dialog open={isEditSubTaskOpen} onOpenChange={setIsEditSubTaskOpen}>
+        <DialogContent className="sm:max-w-lg bg-white/95 backdrop-blur-md border-0 shadow-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-semibold text-gray-900">サブタスクを編集</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="editSubTaskName">サブタスク名 *</Label>
+              <Input
+                id="editSubTaskName"
+                value={editSubTaskForm.name}
+                onChange={(e) => setEditSubTaskForm({ ...editSubTaskForm, name: e.target.value })}
+                placeholder="サブタスク名を入力"
+                className="h-10"
+              />
+            </div>
+            <div className="flex justify-end gap-3 pt-4">
+              <Button variant="outline" onClick={() => setIsEditSubTaskOpen(false)} className="px-4 py-2">
+                キャンセル
+              </Button>
+              <Button
+                onClick={handleEditSubTask}
+                disabled={!editSubTaskForm.name}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                更新
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete SubTask Dialog */}
+      <Dialog open={isDeleteSubTaskOpen} onOpenChange={setIsDeleteSubTaskOpen}>
+        <DialogContent className="sm:max-w-lg bg-white/95 backdrop-blur-md border-0 shadow-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-semibold text-gray-900">サブタスクを削除</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-gray-600">「{selectedSubTask?.name}」を削除しますか？この操作は取り消せません。</p>
+            <div className="flex justify-end gap-3 pt-4">
+              <Button variant="outline" onClick={() => setIsDeleteSubTaskOpen(false)} className="px-4 py-2">
+                キャンセル
+              </Button>
+              <Button onClick={handleDeleteSubTask} className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white">
+                削除
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
