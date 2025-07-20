@@ -6,25 +6,12 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import {
-  Plus,
-  Users,
-  Edit3,
-  User,
-  FolderPlus,
-  Trash2,
-  Flag,
-  Settings,
-  Home,
-  BarChart3,
-  Bell,
-  Search,
-  Mail,
-  Phone,
-  Clock,
-} from "lucide-react"
+import { Plus, Users, Edit3, User, FolderPlus, Trash2, Flag, Settings, BarChart3 } from "lucide-react"
 import type { Person, Project } from "@/lib/types"
-import { useSheetTasks } from "@/hooks/use-sheet-tasks"
+
+// Supabaseリアルタイムフックをインポート
+import { useRealtimeProjects } from "@/hooks/use-realtime-projects"
+import { useRealtimePeople } from "@/hooks/use-realtime-people"
 
 // Import category components
 import { CommunicationGantt } from "@/components/gantt/categories/communication"
@@ -38,65 +25,26 @@ import { OthersGantt } from "@/components/gantt/categories/others"
 // Header Component
 function Header() {
   return (
-    <header className="w-full bg-gradient-to-r from-blue-600 to-blue-700 backdrop-blur-md border-b border-blue-500/50 shadow-xl sticky top-0 z-50">
-      <div className="max-w-7xl mx-auto px-6 py-6">
+    <header className="w-full bg-white/80 backdrop-blur-md border-b border-blue-200/50 shadow-lg sticky top-0 z-50">
+      <div className="max-w-7xl mx-auto px-6 py-4">
         <div className="flex items-center justify-between">
           {/* Logo */}
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg">
-              <BarChart3 className="h-7 w-7 text-white" />
+            <div className="w-10 h-10 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center">
+              <BarChart3 className="h-6 w-6 text-white" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-white">Spchart</h1>
-              <p className="text-sm text-blue-100">洗車場プロジェクト管理</p>
+              <h1 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+                Spchart
+              </h1>
+              <p className="text-xs text-gray-500">洗車場プロジェクト管理</p>
             </div>
           </div>
 
           {/* Navigation */}
-          <nav className="hidden md:flex items-center gap-6">
-            <Button
-              variant="ghost"
-              className="text-blue-100 hover:text-white hover:bg-blue-500/50 transition-all duration-200"
-            >
-              <Home className="h-4 w-4 mr-2" />
-              ホーム
-            </Button>
-            <Button
-              variant="ghost"
-              className="text-blue-100 hover:text-white hover:bg-blue-500/50 transition-all duration-200"
-            >
-              <BarChart3 className="h-4 w-4 mr-2" />
-              プロジェクト
-            </Button>
-            <Button
-              variant="ghost"
-              className="text-blue-100 hover:text-white hover:bg-blue-500/50 transition-all duration-200"
-            >
-              <Users className="h-4 w-4 mr-2" />
-              チーム
-            </Button>
-          </nav>
+          <nav className="hidden md:flex items-center gap-6"></nav>
 
           {/* Actions */}
-          <div className="flex items-center gap-3">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-blue-100 hover:text-white hover:bg-blue-500/50 rounded-xl transition-all duration-200"
-            >
-              <Search className="h-5 w-5" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-blue-100 hover:text-white hover:bg-blue-500/50 rounded-xl transition-all duration-200"
-            >
-              <Bell className="h-5 w-5" />
-            </Button>
-            <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full flex items-center justify-center shadow-lg">
-              <User className="h-5 w-5 text-white" />
-            </div>
-          </div>
         </div>
       </div>
     </header>
@@ -104,123 +52,10 @@ function Header() {
 }
 
 // Footer Component
-function Footer() {
-  return (
-    <footer className="w-full bg-white/80 backdrop-blur-md border-t border-blue-200/50 mt-auto">
-      <div className="max-w-7xl mx-auto px-6 py-8">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
-          {/* Company Info */}
-          <div className="space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-lg flex items-center justify-center">
-                <BarChart3 className="h-4 w-4 text-white" />
-              </div>
-              <h3 className="text-lg font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-                Spchart
-              </h3>
-            </div>
-            <p className="text-sm text-gray-600">
-              洗車場開発プロジェクトを効率的に管理するためのプロジェクト管理システムです。
-            </p>
-          </div>
-
-          {/* Quick Links */}
-          <div className="space-y-4">
-            <h4 className="font-semibold text-gray-800">クイックリンク</h4>
-            <div className="space-y-2">
-              <a href="#" className="block text-sm text-gray-600 hover:text-blue-600 transition-colors">
-                プロジェクト一覧
-              </a>
-              <a href="#" className="block text-sm text-gray-600 hover:text-blue-600 transition-colors">
-                担当者管理
-              </a>
-              <a href="#" className="block text-sm text-gray-600 hover:text-blue-600 transition-colors">
-                ガントチャート
-              </a>
-              <a href="#" className="block text-sm text-gray-600 hover:text-blue-600 transition-colors">
-                レポート
-              </a>
-            </div>
-          </div>
-
-          {/* Support */}
-          <div className="space-y-4">
-            <h4 className="font-semibold text-gray-800">サポート</h4>
-            <div className="space-y-2">
-              <a href="#" className="block text-sm text-gray-600 hover:text-blue-600 transition-colors">
-                ヘルプセンター
-              </a>
-              <a href="#" className="block text-sm text-gray-600 hover:text-blue-600 transition-colors">
-                使い方ガイド
-              </a>
-              <a href="#" className="block text-sm text-gray-600 hover:text-blue-600 transition-colors">
-                お問い合わせ
-              </a>
-              <a href="#" className="block text-sm text-gray-600 hover:text-blue-600 transition-colors">
-                FAQ
-              </a>
-            </div>
-          </div>
-
-          {/* Contact */}
-          <div className="space-y-4">
-            <h4 className="font-semibold text-gray-800">お問い合わせ</h4>
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 text-sm text-gray-600">
-                <Mail className="h-4 w-4" />
-                <span>support@spchart.com</span>
-              </div>
-              <div className="flex items-center gap-2 text-sm text-gray-600">
-                <Phone className="h-4 w-4" />
-                <span>03-1234-5678</span>
-              </div>
-              <div className="flex items-center gap-2 text-sm text-gray-600">
-                <Clock className="h-4 w-4" />
-                <span>平日 9:00-18:00</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="border-t border-gray-200/50 mt-8 pt-6">
-          <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-            <p className="text-sm text-gray-500">© 2024 Spchart. All rights reserved.</p>
-            <div className="flex items-center gap-6">
-              <a href="#" className="text-sm text-gray-500 hover:text-blue-600 transition-colors">
-                プライバシーポリシー
-              </a>
-              <a href="#" className="text-sm text-gray-500 hover:text-blue-600 transition-colors">
-                利用規約
-              </a>
-              <a href="#" className="text-sm text-gray-500 hover:text-blue-600 transition-colors">
-                セキュリティ
-              </a>
-            </div>
-          </div>
-        </div>
-      </div>
-    </footer>
-  )
-}
+function Footer() {}
 
 // Sidebar Navigation Component
-function SidebarNav() {
-  return (
-    <div className="fixed right-0 top-0 h-full w-20 bg-white/80 backdrop-blur-md border-l border-blue-200/50 flex flex-col items-center py-8 z-40 shadow-lg">
-      <div className="flex flex-col gap-6">
-        <button className="w-12 h-12 bg-blue-500/20 hover:bg-blue-500/30 rounded-xl flex items-center justify-center text-blue-600 hover:text-blue-700 transition-all duration-300 shadow-sm hover:shadow-md">
-          <Home className="h-5 w-5" />
-        </button>
-        <button className="w-12 h-12 bg-gray-100/50 hover:bg-blue-100/50 rounded-xl flex items-center justify-center text-gray-500 hover:text-blue-600 transition-all duration-300 shadow-sm hover:shadow-md">
-          <BarChart3 className="h-5 w-5" />
-        </button>
-      </div>
-      <div className="mt-auto">
-        <div className="text-xs text-gray-400 writing-mode-vertical-rl text-orientation-mixed">Manage</div>
-      </div>
-    </div>
-  )
-}
+function SidebarNav() {}
 
 interface ProjectDetailViewProps {
   project: Project
@@ -287,7 +122,6 @@ function ProjectDetailView({ project, onBack, onUpdateProject, people }: Project
       </div>
 
       <Header />
-      <SidebarNav />
 
       <div className="relative z-10 pr-20 flex-1">
         <div className="w-full max-w-6xl mx-auto p-8">
@@ -384,9 +218,27 @@ function ProjectDetailView({ project, onBack, onUpdateProject, people }: Project
               </div>
             )}
             {!project.openDate && (
-              <p className="text-gray-500 mb-4 bg-white/50 backdrop-blur-sm px-6 py-3 rounded-full inline-block">
-                OPEN日を設定してガントチャートを最適化しましょう
-              </p>
+              <div className="bg-yellow-50/80 backdrop-blur-sm border border-yellow-200 rounded-2xl p-6 mb-8 max-w-2xl mx-auto">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-8 h-8 bg-yellow-100 rounded-full flex items-center justify-center">
+                    <Flag className="h-4 w-4 text-yellow-600" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-yellow-800">OPEN日の設定が必要です</h3>
+                </div>
+                <p className="text-yellow-700 mb-4">
+                  洗車場のOPEN予定日を設定すると、各カテゴリーのガントチャートにアクセスできるようになります。
+                  OPEN日から逆算してタスクのスケジュールが自動的に計算されます。
+                </p>
+                <div className="flex justify-center">
+                  <Button
+                    onClick={() => setIsSettingsOpen(true)}
+                    className="bg-yellow-600 hover:bg-yellow-700 text-white px-6 py-2 rounded-xl"
+                  >
+                    <Flag className="w-4 h-4 mr-2" />
+                    今すぐOPEN日を設定
+                  </Button>
+                </div>
+              </div>
             )}
           </div>
 
@@ -395,14 +247,32 @@ function ProjectDetailView({ project, onBack, onUpdateProject, people }: Project
             {categories.slice(0, 6).map((category, index) => (
               <Card
                 key={category}
-                className="h-32 bg-white/70 backdrop-blur-md border-blue-200/50 hover:bg-white/90 hover:border-blue-300/70 transition-all duration-500 hover:scale-105 cursor-pointer animate-fade-in-up shadow-lg hover:shadow-2xl rounded-2xl group"
+                className={`h-32 backdrop-blur-md border-blue-200/50 transition-all duration-500 rounded-2xl group ${
+                  project.openDate
+                    ? "bg-white/70 hover:bg-white/90 hover:border-blue-300/70 hover:scale-105 cursor-pointer shadow-lg hover:shadow-2xl"
+                    : "bg-gray-100/50 border-gray-300/50 cursor-not-allowed opacity-60"
+                } animate-fade-in-up`}
                 style={{ animationDelay: `${index * 100}ms` }}
-                onClick={() => setSelectedCategory(category)}
+                onClick={() => project.openDate && setSelectedCategory(category)}
               >
-                <CardContent className="flex items-center justify-center h-full p-6">
-                  <h3 className="text-lg font-semibold text-blue-700 text-center group-hover:text-blue-800 transition-colors duration-300">
+                <CardContent className="flex flex-col items-center justify-center h-full p-6 relative">
+                  {!project.openDate && (
+                    <div className="absolute top-2 right-2">
+                      <div className="w-4 h-4 bg-red-500 rounded-full flex items-center justify-center">
+                        <span className="text-white text-xs font-bold">!</span>
+                      </div>
+                    </div>
+                  )}
+                  <h3
+                    className={`text-lg font-semibold text-center transition-colors duration-300 ${
+                      project.openDate ? "text-blue-700 group-hover:text-blue-800" : "text-gray-500"
+                    }`}
+                  >
                     {category}
                   </h3>
+                  {!project.openDate && (
+                    <p className="text-xs text-red-500 mt-1 text-center">OPEN日を設定してください</p>
+                  )}
                 </CardContent>
               </Card>
             ))}
@@ -410,31 +280,44 @@ function ProjectDetailView({ project, onBack, onUpdateProject, people }: Project
             {/* その他 - Full width */}
             <div className="md:col-span-3 flex justify-center">
               <Card
-                className="h-32 w-80 bg-white/70 backdrop-blur-md border-blue-200/50 hover:bg-white/90 hover:border-blue-300/70 transition-all duration-500 hover:scale-105 cursor-pointer animate-fade-in-up shadow-lg hover:shadow-2xl rounded-2xl group"
+                className={`h-32 w-80 backdrop-blur-md border-blue-200/50 transition-all duration-500 rounded-2xl group ${
+                  project.openDate
+                    ? "bg-white/70 hover:bg-white/90 hover:border-blue-300/70 hover:scale-105 cursor-pointer shadow-lg hover:shadow-2xl"
+                    : "bg-gray-100/50 border-gray-300/50 cursor-not-allowed opacity-60"
+                } animate-fade-in-up`}
                 style={{ animationDelay: `600ms` }}
-                onClick={() => setSelectedCategory("その他")}
+                onClick={() => project.openDate && setSelectedCategory("その他")}
               >
-                <CardContent className="flex items-center justify-center h-full p-6">
-                  <h3 className="text-lg font-semibold text-blue-700 text-center group-hover:text-blue-800 transition-colors duration-300">
+                <CardContent className="flex flex-col items-center justify-center h-full p-6 relative">
+                  {!project.openDate && (
+                    <div className="absolute top-2 right-2">
+                      <div className="w-4 h-4 bg-red-500 rounded-full flex items-center justify-center">
+                        <span className="text-white text-xs font-bold">!</span>
+                      </div>
+                    </div>
+                  )}
+                  <h3
+                    className={`text-lg font-semibold text-center transition-colors duration-300 ${
+                      project.openDate ? "text-blue-700 group-hover:text-blue-800" : "text-gray-500"
+                    }`}
+                  >
                     その他
                   </h3>
+                  {!project.openDate && (
+                    <p className="text-xs text-red-500 mt-1 text-center">OPEN日を設定してください</p>
+                  )}
                 </CardContent>
               </Card>
             </div>
           </div>
         </div>
       </div>
-
-      <Footer />
     </div>
   )
 }
 
 export default function ProjectManagementApp() {
-  const [projects, setProjects] = useState<Project[]>([])
   const [selectedProject, setSelectedProject] = useState<Project | null>(null)
-
-  const [people, setPeople] = useState<Person[]>([])
   const [isAddPersonOpen, setIsAddPersonOpen] = useState(false)
   const [isEditPersonOpen, setIsEditPersonOpen] = useState(false)
   const [isAddProjectOpen, setIsAddProjectOpen] = useState(false)
@@ -444,70 +327,80 @@ export default function ProjectManagementApp() {
   const [newPersonForm, setNewPersonForm] = useState({ firstName: "", lastName: "" })
   const [newProjectName, setNewProjectName] = useState("")
 
+  // Supabaseリアルタイムフックを使用
   const {
-    tasks: sheetTasks,
-    loading: tasksLoading,
-    error: tasksError,
-    refetch,
-  } = useSheetTasks(selectedProject?.openDate, people)
+    projects,
+    loading: projectsLoading,
+    error: projectsError,
+    addProject,
+    updateProject,
+    deleteProject,
+  } = useRealtimeProjects()
 
-  const handleAddPerson = () => {
+  const {
+    people,
+    loading: peopleLoading,
+    error: peopleError,
+    addPerson,
+    updatePerson,
+    deletePerson,
+  } = useRealtimePeople()
+
+  const handleAddPerson = async () => {
     if (newPersonForm.firstName && newPersonForm.lastName) {
-      // すべての担当者に青色を統一
-      const newPerson: Person = {
-        id: Date.now().toString(),
-        firstName: newPersonForm.firstName,
-        lastName: newPersonForm.lastName,
-        color: "bg-blue-100 border-blue-200 text-blue-800", // 後方互換性のため
-        bgColor: "bg-blue-600",
-        textColor: "text-blue-700",
+      try {
+        await addPerson(newPersonForm.firstName, newPersonForm.lastName)
+        setNewPersonForm({ firstName: "", lastName: "" })
+        setIsAddPersonOpen(false)
+      } catch (error) {
+        console.error("Failed to add person:", error)
       }
-      setPeople([...people, newPerson])
-      setNewPersonForm({ firstName: "", lastName: "" })
-      setIsAddPersonOpen(false)
     }
   }
 
-  const handleEditPerson = () => {
+  const handleEditPerson = async () => {
     if (editingPerson && newPersonForm.firstName && newPersonForm.lastName) {
-      setPeople(
-        people.map((person) =>
-          person.id === editingPerson.id
-            ? { ...person, firstName: newPersonForm.firstName, lastName: newPersonForm.lastName }
-            : person,
-        ),
-      )
-      setNewPersonForm({ firstName: "", lastName: "" })
-      setEditingPerson(null)
-      setIsEditPersonOpen(false)
-    }
-  }
-
-  const handleAddProject = () => {
-    if (newProjectName) {
-      const newProject: Project = {
-        id: Date.now().toString(),
-        name: newProjectName,
+      try {
+        await updatePerson(editingPerson.id, newPersonForm.firstName, newPersonForm.lastName)
+        setNewPersonForm({ firstName: "", lastName: "" })
+        setEditingPerson(null)
+        setIsEditPersonOpen(false)
+      } catch (error) {
+        console.error("Failed to update person:", error)
       }
-      setProjects([...projects, newProject])
-      setNewProjectName("")
-      setIsAddProjectOpen(false)
     }
   }
 
-  const handleDeleteProject = () => {
+  const handleAddProject = async () => {
+    if (newProjectName) {
+      try {
+        await addProject(newProjectName)
+        setNewProjectName("")
+        setIsAddProjectOpen(false)
+      } catch (error) {
+        console.error("Failed to add project:", error)
+      }
+    }
+  }
+
+  const handleDeleteProject = async () => {
     if (projectToDelete) {
-      setProjects(projects.filter((p) => p.id !== projectToDelete.id))
-      setProjectToDelete(null)
-      setIsDeleteProjectOpen(false)
+      try {
+        await deleteProject(projectToDelete.id)
+        setProjectToDelete(null)
+        setIsDeleteProjectOpen(false)
+      } catch (error) {
+        console.error("Failed to delete project:", error)
+      }
     }
   }
 
-  const handleUpdateProject = (updatedProject: Project) => {
-    setProjects(projects.map((p) => (p.id === updatedProject.id ? updatedProject : p)))
-    setSelectedProject(updatedProject)
-    if (updatedProject.openDate) {
-      refetch()
+  const handleUpdateProject = async (updatedProject: Project) => {
+    try {
+      await updateProject(updatedProject.id, updatedProject)
+      setSelectedProject(updatedProject)
+    } catch (error) {
+      console.error("Failed to update project:", error)
     }
   }
 
@@ -544,7 +437,6 @@ export default function ProjectManagementApp() {
           // Main View - Centered
           <>
             <Header />
-            <SidebarNav />
             <div className="flex-1 max-w-6xl mx-auto p-8 pr-28">
               {/* Header */}
               <div className="text-center mb-16">
@@ -833,7 +725,33 @@ export default function ProjectManagementApp() {
 
                 {/* People List */}
                 <div className="flex-1">
-                  {people.length > 0 ? (
+                  {peopleLoading ? (
+                    <div className="text-center py-6 bg-white/30 backdrop-blur-sm rounded-xl">
+                      <div className="text-blue-500 mb-3">
+                        <svg
+                          className="animate-spin h-8 w-8 mx-auto"
+                          xmlns="http://www.w3.org/2000/svg"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                        >
+                          <circle
+                            className="opacity-25"
+                            cx="12"
+                            cy="12"
+                            r="10"
+                            stroke="currentColor"
+                            strokeWidth="4"
+                          ></circle>
+                          <path
+                            className="opacity-75"
+                            fill="currentColor"
+                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                          ></path>
+                        </svg>
+                      </div>
+                      <h3 className="text-sm font-medium text-gray-600 mb-1">担当者を読み込み中...</h3>
+                    </div>
+                  ) : people.length > 0 ? (
                     <div>
                       <h2 className="text-lg font-medium bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent mb-4 inline-block">
                         登録済み担当者
@@ -867,7 +785,33 @@ export default function ProjectManagementApp() {
               </div>
 
               {/* Projects Grid */}
-              {projects.length === 0 ? (
+              {projectsLoading ? (
+                <div className="text-center py-16 bg-white/50 backdrop-blur-sm rounded-2xl">
+                  <div className="text-blue-500 mb-4">
+                    <svg
+                      className="animate-spin h-16 w-16 mx-auto mb-4"
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                      ></circle>
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                      ></path>
+                    </svg>
+                  </div>
+                  <h3 className="text-xl font-medium text-gray-600 mb-2">プロジェクトを読み込み中...</h3>
+                </div>
+              ) : projects.length === 0 ? (
                 <div className="text-center py-16 bg-white/50 backdrop-blur-sm rounded-2xl">
                   <div className="text-gray-400 mb-4">
                     <Plus className="mx-auto h-16 w-16 mb-4" />
@@ -967,7 +911,6 @@ export default function ProjectManagementApp() {
                 </DialogContent>
               </Dialog>
             </div>
-            <Footer />
           </>
         )}
       </div>
