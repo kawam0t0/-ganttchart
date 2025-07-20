@@ -1,26 +1,23 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import type { Task } from "@/lib/types"
-import type { SheetTask } from "@/lib/sheet-utils"
+import { useState, useEffect, useCallback } from "react"
+import type { Person, Task } from "@/lib/types"
+import { convertSheetTasksToGanttTasks, type SheetTask } from "@/lib/sheet-utils"
 
-export function useSheetTasks(openDate: Date | undefined, people: any[]) {
-  const [tasks, setTasks] = useState<{ [category: string]: Task[] }>({})
-  const [loading, setLoading] = useState(false)
+export function useSheetTasks(
+  openDate: Date | undefined,
+  people: Person[],
+  category: string,
+  existingTaskNames: Set<string>, // Set<string>に変更
+) {
+  const [tasks, setTasks] = useState<Task[]>([])
+  const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const fetchTasks = async () => {
+  const fetchTasks = useCallback(async () => {
     if (!openDate) {
-      // OPEN日が設定されていない場合は空のデータを返す
-      setTasks({
-        連絡系: [],
-        販促物備品系: [],
-        通信系: [],
-        プロモーション系: [],
-        求人系: [],
-        研修系: [],
-        その他: [],
-      })
+      setTasks([])
+      setLoading(false)
       return
     }
 
@@ -28,106 +25,59 @@ export function useSheetTasks(openDate: Date | undefined, people: any[]) {
     setError(null)
 
     try {
-      console.log("🔄 Fetching sheet tasks for OPEN date:", openDate)
+      console.log(`🔄 Fetching sheet tasks for category: ${category}`)
 
       const response = await fetch("/api/sheets")
       if (!response.ok) {
-        throw new Error(`Failed to fetch sheet data: ${response.status}`)
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Failed to fetch sheet data")
       }
 
-      const data = await response.json()
+      const data: { tasks: SheetTask[] } = await response.json()
       console.log("📊 Raw sheet data received:", data)
 
-      const sheetTasks: SheetTask[] = data.tasks
+      const allSheetTasks: SheetTask[] = data.tasks
+      const categoryTasks = allSheetTasks.filter((task) => task.category === category)
 
-      // カテゴリー別にタスクを分類
-      const categorizedTasks: { [category: string]: Task[] } = {
-        連絡系: [],
-        販促物備品系: [],
-        通信系: [],
-        プロモーション系: [],
-        求人系: [],
-        研修系: [],
-        その他: [],
-      }
+      console.log(`📋 Found ${categoryTasks.length} tasks for category: ${category}`)
+      console.log("🔍 Existing task names:", Array.from(existingTaskNames))
 
-      // スプレッドシートのデータをカテゴリー別に分類
-      sheetTasks.forEach((sheetTask, index) => {
-        // 空のタスクをスキップ
-        if (!sheetTask.mainTask || sheetTask.mainTask.trim() === "") {
-          console.log(`⏭️ Skipping empty task at index ${index}`)
-          return
+      // データベースに既に存在するタスクを名前でフィルタリングして除外
+      const newTasks = categoryTasks.filter((task) => {
+        const exists = existingTaskNames.has(task.mainTask)
+        if (exists) {
+          console.log(`⏭️ Skipping existing task: ${task.mainTask}`)
         }
-
-        const category = sheetTask.category
-        console.log(
-          `📝 Processing task: "${sheetTask.mainTask}" in category: "${category}", displayOrder: ${sheetTask.displayOrder}`,
-        )
-
-        // カテゴリーが存在するかチェック
-        if (categorizedTasks[category]) {
-          // OPEN日から逆算して開始日を計算
-          const startDate = new Date(openDate)
-          startDate.setDate(startDate.getDate() - sheetTask.fromOpen)
-
-          // 期間を加えて終了日を計算
-          const endDate = new Date(startDate)
-          endDate.setDate(endDate.getDate() + sheetTask.period - 1)
-
-          const task: Task = {
-            id: `sheet-${category}-${index}`,
-            name: sheetTask.mainTask,
-            startDate,
-            endDate,
-            progress: 0, // デフォルトで0%に設定
-            assignedPerson: undefined, // デフォルトでは担当者を割り当てない
-            orderIndex: sheetTask.displayOrder, // スプレッドシートのB列番号を使用
-            subTasks: sheetTask.subTasks.map((st) => ({
-              ...st,
-              // assignedPersonは設定しない
-            })),
-          }
-
-          categorizedTasks[category].push(task)
-          console.log(
-            `✅ Added task "${task.name}" to category "${category}" with displayOrder ${sheetTask.displayOrder}`,
-          )
-        } else {
-          console.warn(`⚠️ Unknown category: "${category}" for task: "${sheetTask.mainTask}"`)
-        }
+        return !exists
       })
 
-      // 各カテゴリーのタスクをdisplayOrder（orderIndex）でソート
-      Object.keys(categorizedTasks).forEach((category) => {
-        categorizedTasks[category].sort((a, b) => {
-          const orderA = a.orderIndex !== undefined ? a.orderIndex : 9999
-          const orderB = b.orderIndex !== undefined ? b.orderIndex : 9999
-          return orderA - orderB
-        })
-        console.log(
-          `🔢 Sorted category "${category}" by displayOrder:`,
-          categorizedTasks[category].map((t) => ({ name: t.name, order: t.orderIndex })),
-        )
+      console.log(`✅ Filtered to ${newTasks.length} new tasks`)
+
+      const ganttTasks = convertSheetTasksToGanttTasks(newTasks, openDate, people)
+
+      // orderIndexでソート
+      ganttTasks.sort((a, b) => {
+        const orderA = a.orderIndex ?? Number.POSITIVE_INFINITY
+        const orderB = b.orderIndex ?? Number.POSITIVE_INFINITY
+        return orderA - orderB
       })
 
-      // 各カテゴリーのタスク数をログ出力
-      Object.entries(categorizedTasks).forEach(([category, tasks]) => {
-        console.log(`📊 Category "${category}": ${tasks.length} tasks`)
-      })
-
-      setTasks(categorizedTasks)
-      console.log("🎉 Sheet tasks successfully categorized:", categorizedTasks)
+      setTasks(ganttTasks)
+      console.log(
+        `🎉 Successfully loaded ${ganttTasks.length} sheet tasks for category: ${category}`,
+        ganttTasks.map((t) => ({ name: t.name, orderIndex: t.orderIndex })),
+      )
     } catch (err) {
-      console.error("❌ Error fetching sheet tasks:", err)
+      console.error(`❌ Error fetching sheet tasks for ${category}:`, err)
       setError(err instanceof Error ? err.message : "Unknown error")
     } finally {
       setLoading(false)
     }
-  }
+  }, [openDate, people, category, existingTaskNames])
 
   useEffect(() => {
     fetchTasks()
-  }, [openDate, people])
+  }, [fetchTasks])
 
   return { tasks, loading, error, refetch: fetchTasks }
 }

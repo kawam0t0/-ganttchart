@@ -1,10 +1,10 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { GanttChart } from "../gantt-chart"
-import type { Person, Task } from "@/lib/types"
-import { useRealtimeTasks } from "@/hooks/use-realtime-tasks"
+import { useMemo } from "react"
+import { GanttChart } from "@/components/gantt/gantt-chart"
 import { useSheetTasks } from "@/hooks/use-sheet-tasks"
+import { useRealtimeTasks } from "@/hooks/use-realtime-tasks"
+import type { Person } from "@/lib/types"
 
 interface PromotionGanttProps {
   project: { id: string; name: string; openDate?: Date }
@@ -13,91 +13,48 @@ interface PromotionGanttProps {
 }
 
 export function PromotionGantt({ project, people, onBack }: PromotionGanttProps) {
-  const [combinedTasks, setCombinedTasks] = useState<Task[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-
-  // Supabaseリアルタイムフック
+  const category = "販促物備品系"
   const {
-    tasks: supabaseTasks,
-    loading: supabaseLoading,
+    tasks: dbTasks,
+    loading: dbLoading,
     addTask,
     updateTask,
     deleteTask,
     addSubTask,
     updateSubTask,
     deleteSubTask,
-    refetch: refetchSupabase,
-  } = useRealtimeTasks(project.id, "販促物備品系", people)
+    refetch: refetchDbTasks,
+  } = useRealtimeTasks(project.id, category, people)
 
-  // スプレッドシートデータフック
+  const dbTaskNames = useMemo(() => new Set(dbTasks.map((t) => t.name)), [dbTasks])
+
   const {
     tasks: sheetTasks,
     loading: sheetLoading,
-    error: sheetError,
-    refetch: refetchSheet,
-  } = useSheetTasks(project.openDate, people)
+    refetch: refetchSheetTasks,
+  } = useSheetTasks(project.openDate, people, category, dbTaskNames)
 
-  // データを統合
-  useEffect(() => {
-    console.log("🔄 PromotionGantt: Combining tasks...")
-    console.log("📊 Supabase tasks:", supabaseTasks)
-    console.log("📊 Sheet tasks for 販促物備品系:", sheetTasks["販促物備品系"])
-
-    const categorySheetTasks = sheetTasks["販促物備品系"] || []
-
-    // 重複チェック: 同じ名前のタスクがある場合はSupabaseを優先
-    const supabaseTaskNames = new Set(supabaseTasks.map((task) => task.name))
-    const filteredSheetTasks = categorySheetTasks.filter((task) => !supabaseTaskNames.has(task.name))
-
-    // スプレッドシートタスクをdisplayOrder（orderIndex）でソート
-    const sortedSheetTasks = filteredSheetTasks.sort((a, b) => {
-      const orderA = a.orderIndex !== undefined ? a.orderIndex : 9999
-      const orderB = b.orderIndex !== undefined ? b.orderIndex : 9999
+  const allTasks = useMemo(() => {
+    const combined = [...sheetTasks, ...dbTasks]
+    return combined.sort((a, b) => {
+      const orderA = a.orderIndex ?? Number.POSITIVE_INFINITY
+      const orderB = b.orderIndex ?? Number.POSITIVE_INFINITY
       return orderA - orderB
     })
-
-    // SupabaseタスクもorderIndexでソート
-    const sortedSupabaseTasks = supabaseTasks.sort((a, b) => {
-      const orderA = a.orderIndex !== undefined ? a.orderIndex : 10000
-      const orderB = b.orderIndex !== undefined ? b.orderIndex : 10000
-      return orderA - orderB
-    })
-
-    const combined = [...sortedSheetTasks, ...sortedSupabaseTasks]
-
-    console.log(`✅ PromotionGantt: Combined ${combined.length} tasks`)
-    console.log(
-      "📋 Final task list:",
-      combined.map((t) => ({
-        name: t.name,
-        id: t.id,
-        orderIndex: t.orderIndex,
-        subTaskCount: t.subTasks?.length || 0,
-      })),
-    )
-
-    setCombinedTasks(combined)
-    setIsLoading(supabaseLoading || sheetLoading)
-  }, [supabaseTasks, sheetTasks, supabaseLoading, sheetLoading])
+  }, [sheetTasks, dbTasks])
 
   const handleRefresh = async () => {
-    console.log("🔄 PromotionGantt: Refreshing data...")
-    await Promise.all([refetchSupabase(), refetchSheet()])
-  }
-
-  // エラー表示
-  if (sheetError) {
-    console.error("❌ PromotionGantt: Sheet error:", sheetError)
+    await Promise.all([refetchDbTasks(), refetchSheetTasks()])
   }
 
   return (
     <GanttChart
       project={project}
-      category="販促物備品系"
-      tasks={combinedTasks}
+      category={category}
+      tasks={allTasks}
       people={people}
       onBack={onBack}
-      loading={isLoading}
+      loading={dbLoading || sheetLoading}
       onRefresh={handleRefresh}
       onAddTask={addTask}
       onUpdateTask={updateTask}

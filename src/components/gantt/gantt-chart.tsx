@@ -63,7 +63,15 @@ interface GanttChartProps {
   loading?: boolean
   onRefresh?: () => void
   // Supabase操作用の関数
-  onAddTask?: (taskData: { name: string; startDate: Date; endDate: Date; assignedPersonId?: string }) => Promise<any>
+  onAddTask?: (taskData: {
+    name: string
+    startDate: Date
+    endDate: Date
+    assignedPersonId?: string
+    orderIndex?: number
+    progress?: number
+    is_local?: boolean
+  }) => Promise<any>
   onUpdateTask?: (taskId: string, updates: Partial<Task>) => Promise<void>
   onDeleteTask?: (taskId: string) => Promise<void>
   onAddSubTask?: (taskId: string, name: string) => Promise<any>
@@ -199,6 +207,9 @@ export function GanttChart({
             startDate: originalTask.startDate,
             endDate: originalTask.endDate,
             assignedPersonId: personId,
+            orderIndex: originalTask.orderIndex, // Pass the original orderIndex
+            progress: progress,
+            is_local: false, // Mark as a converted sheet task
           })
 
           // サブタスクを移行
@@ -305,6 +316,9 @@ export function GanttChart({
             startDate: originalTask.startDate,
             endDate: originalTask.endDate,
             assignedPersonId: originalTask.assignedPerson?.id,
+            orderIndex: originalTask.orderIndex, // Pass the original orderIndex
+            progress: progress, // Pass the calculated progress
+            is_local: false, // Mark as a converted sheet task
           })
 
           // 新しく作成されたタスクにサブタスクを追加
