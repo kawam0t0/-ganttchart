@@ -4,7 +4,7 @@ import { google } from "googleapis"
 // 環境変数から設定を取得
 const SPREADSHEET_ID = process.env.GOOGLE_SPREADSHEET_ID || "1CeBtnqQMXNbU4ar3fdfefdkcIAjm7yVc9xl-EYEbkMM"
 const SHEET_NAME = process.env.GOOGLE_SHEET_NAME || "default_schedule"
-const RANGE = `${SHEET_NAME}!A:N`
+const RANGE = `${SHEET_NAME}!A:O` // O列まで取得するよう拡張
 
 export async function GET(request: NextRequest) {
   try {
@@ -125,6 +125,13 @@ export async function GET(request: NextRequest) {
     // ヘッダー行を除いてデータを処理
     const [header, ...dataRows] = rows
     console.log("- Header:", header)
+    console.log("- Column mapping:")
+    console.log("  A: category")
+    console.log("  B: number (displayOrder)")
+    console.log("  C: main_task")
+    console.log("  D-M: sub_task_1 to sub_task_10")
+    console.log("  N: period")
+    console.log("  O: from_open")
 
     const tasks = dataRows.map((row, index) => {
       const subTasks = []
@@ -144,12 +151,13 @@ export async function GET(request: NextRequest) {
         displayOrder: Number.parseInt(row[1]) || 9999, // B列: number（表示順番号）
         mainTask: row[2] || "", // C列: main_task
         subTasks: subTasks, // D-M列: サブタスク
-        period: Number.parseInt(row[12]) || 1, // M列: period（日数）
-        fromOpen: Number.parseInt(row[13]) || 0, // N列: from_open（OPEN日からの逆算日数）
+        period: Number.parseInt(row[13]) || 1, // N列: period（日数）- 修正
+        fromOpen: Number.parseInt(row[14]) || 0, // O列: from_open（OPEN日からの逆算日数）- 修正
       }
     })
 
     console.log(`✓ Successfully processed ${tasks.length} tasks`)
+    console.log("- Sample task structure:", tasks[0])
 
     return NextResponse.json({
       success: true,
@@ -160,6 +168,14 @@ export async function GET(request: NextRequest) {
         spreadsheetId: SPREADSHEET_ID,
         sheetName: SHEET_NAME,
         header: header,
+        columnMapping: {
+          A: "category",
+          B: "number (displayOrder)",
+          C: "main_task",
+          "D-M": "sub_task_1 to sub_task_10",
+          N: "period",
+          O: "from_open",
+        },
       },
     })
   } catch (error) {
