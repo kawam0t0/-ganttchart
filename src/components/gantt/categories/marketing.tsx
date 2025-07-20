@@ -49,8 +49,7 @@ export function MarketingGantt({ project, people, onBack }: MarketingGanttProps)
     const supabaseTaskNames = new Set(supabaseTasks.map((task) => task.name))
     const filteredSheetTasks = categorySheetTasks.filter((task) => !supabaseTaskNames.has(task.name))
 
-    // 元の順序を保持：スプレッドシートタスクを先に、Supabaseタスクを後に配置
-    // 進捗率や完了状態でソートしない
+    // スプレッドシートタスクを先に、Supabaseタスクを後に配置
     const combined = [...filteredSheetTasks, ...supabaseTasks]
 
     console.log(`✅ MarketingGantt: Combined ${combined.length} tasks`)
