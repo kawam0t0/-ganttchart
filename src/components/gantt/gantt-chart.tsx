@@ -734,7 +734,9 @@ export function GanttChart({
                           <div className="flex-1 min-w-0">
                             <h3 className="font-medium text-gray-800 truncate">{task.name}</h3>
                             {task.assignedPerson && (
-                              <p className="text-xs text-gray-500">担当: {task.assignedPerson.firstName}</p>
+                              <p className="text-xs text-gray-500">
+                                担当: {task.assignedPerson.firstName} {task.assignedPerson.lastName}
+                              </p>
                             )}
                           </div>
                           <Button
@@ -855,7 +857,7 @@ export function GanttChart({
                     <div>
                       <p className="font-medium">タスク追加について</p>
                       <p className="mt-1">
-                        追加されたタスクはリアルタイムで他のユーザーにも共有されます。サブタスクの追加や編集も可能です
+                        追加されたタスクはリアルタイムで他のユーザーにも共有されます。サブタスクの追加や編集も可能です���
                       </p>
                     </div>
                   </div>
@@ -1099,7 +1101,9 @@ export function GanttChart({
                         <div className="flex items-center gap-2">
                           {/* 担当者名または未割り当て表示 */}
                           {item.task.assignedPerson ? (
-                            <div className="text-xs text-gray-600">{item.task.assignedPerson.firstName}</div>
+                            <div className="text-xs text-gray-600">
+                              {item.task.assignedPerson.firstName} {item.task.assignedPerson.lastName}
+                            </div>
                           ) : (
                             <div className="text-xs text-gray-400">未割り当て</div>
                           )}

@@ -912,7 +912,9 @@ export default function ProjectManagementApp() {
                           {project.assignedPerson && (
                             <div className="flex items-center justify-center gap-2">
                               <div className={`w-3 h-3 rounded-full ${project.assignedPerson.bgColor}`}></div>
-                              <p className="text-sm text-gray-600">担当: {project.assignedPerson.firstName}</p>
+                              <p className="text-sm text-gray-600">
+                                担当: {project.assignedPerson.firstName} {project.assignedPerson.lastName}
+                              </p>
                             </div>
                           )}
                         </div>
