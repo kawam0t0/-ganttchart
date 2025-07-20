@@ -124,10 +124,10 @@ export function GanttChart({
   const taskNameScrollRef = useRef<HTMLDivElement>(null) // タスク名エリアのスクロール参照を追加
 
   // スクロール位置を保存するための参照
-  const scrollPositionRef = useRef({
-    horizontal: 0,
-    vertical: 0,
-  })
+  // const scrollPositionRef = useRef({
+  //   horizontal: 0,
+  //   vertical: 0,
+  // })
 
   // OPEN日から4ヶ月前を開始日として設定
   const openDate = project.openDate || new Date(2024, 3, 1)
@@ -144,32 +144,31 @@ export function GanttChart({
   }
 
   // スクロール位置を保存する関数
-  const saveScrollPosition = () => {
-    if (contentScrollRef.current && taskNameScrollRef.current) {
-      scrollPositionRef.current = {
-        horizontal: contentScrollRef.current.scrollLeft,
-        vertical: taskNameScrollRef.current.scrollTop,
-      }
-    }
-  }
+  // const saveScrollPosition = () => {
+  //   if (contentScrollRef.current && taskNameScrollRef.current) {
+  //     scrollPositionRef.current = {
+  //       horizontal: contentScrollRef.current.scrollLeft,
+  //       vertical: taskNameScrollRef.current.scrollTop,
+  //     }
+  //   }
+  // }
 
   // スクロール位置を復元する関数
-  const restoreScrollPosition = () => {
-    requestAnimationFrame(() => {
-      if (contentScrollRef.current && taskNameScrollRef.current) {
-        contentScrollRef.current.scrollLeft = scrollPositionRef.current.horizontal
-        taskNameScrollRef.current.scrollTop = scrollPositionRef.current.vertical
+  // const restoreScrollPosition = () => {
+  //   requestAnimationFrame(() => {
+  //     if (contentScrollRef.current && taskNameScrollRef.current) {
+  //       contentScrollRef.current.scrollLeft = scrollPositionRef.current.horizontal
+  //       taskNameScrollRef.current.scrollTop = scrollPositionRef.current.vertical
 
-        // 他のスクロール要素も同期
-        syncScrolls(scrollPositionRef.current.horizontal)
-      }
-    })
-  }
+  //       // 他のスクロール要素も同期
+  //       syncScrolls(scrollPositionRef.current.horizontal)
+  //     }
+  //   })
+  // }
 
   // タスクバーのクリックハンドラー
   const handleTaskBarClick = (taskId: string) => {
-    saveScrollPosition() // スクロール位置を保存
-
+    // saveScrollPosition() // スクロール位置を保存
     const newExpandedTasks = new Set(expandedTasks)
     if (expandedTasks.has(taskId)) {
       newExpandedTasks.delete(taskId)
@@ -177,18 +176,11 @@ export function GanttChart({
       newExpandedTasks.add(taskId)
     }
     setExpandedTasks(newExpandedTasks)
-
-    // 状態更新後にスクロール位置を復元
-    setTimeout(() => {
-      restoreScrollPosition()
-    }, 50)
   }
 
   // 担当者を割り当てる関数
   const assignPersonToTask = async (taskId: string, personId: string) => {
     try {
-      saveScrollPosition() // スクロール位置を保存
-
       const selectedPerson = people.find((p) => p.id === personId)
 
       // スプレッドシートタスクの場合は、まずSupabaseに保存してから更新
@@ -230,11 +222,6 @@ export function GanttChart({
 
       setIsAssignDialogOpen(false)
       setAssigningTaskId(null)
-
-      // 更新後にスクロール位置を復元
-      setTimeout(() => {
-        restoreScrollPosition()
-      }, 100)
     } catch (error) {
       console.error("Failed to assign person to task:", error)
     }
@@ -262,8 +249,6 @@ export function GanttChart({
     if (!newMainTask.name.trim() || !newMainTask.startDate || !newMainTask.endDate || !onAddTask) return
 
     try {
-      saveScrollPosition() // スクロール位置を保存
-
       await onAddTask({
         name: newMainTask.name.trim(),
         startDate: new Date(newMainTask.startDate),
@@ -278,11 +263,6 @@ export function GanttChart({
         assignedPersonId: "",
       })
       setIsAddingMainTask(false)
-
-      // 更新後にスクロール位置を復元
-      setTimeout(() => {
-        restoreScrollPosition()
-      }, 100)
     } catch (error) {
       console.error("Failed to add main task:", error)
     }
@@ -307,8 +287,6 @@ export function GanttChart({
   // サブタスクの完了状態切り替え
   const toggleSubTaskCompletion = async (taskId: string, subTaskId: string) => {
     try {
-      saveScrollPosition() // スクロール位置を保存
-
       // スプレッドシートタスクの場合は、まずSupabaseに保存してからサブタスクを更新
       if (taskId.startsWith("sheet-")) {
         const originalTask = tasks.find((t) => t.id === taskId)
@@ -365,11 +343,6 @@ export function GanttChart({
           }
         }
       }
-
-      // 更新後にスクロール位置を復元
-      setTimeout(() => {
-        restoreScrollPosition()
-      }, 150)
     } catch (error) {
       console.error("Failed to toggle subtask completion:", error)
     }
@@ -380,15 +353,8 @@ export function GanttChart({
     if (!newSubTaskName.trim() || !onAddSubTask) return
 
     try {
-      saveScrollPosition() // スクロール位置を保存
-
       await onAddSubTask(taskId, newSubTaskName.trim())
       setNewSubTaskName("")
-
-      // 更新後にスクロール位置を復元
-      setTimeout(() => {
-        restoreScrollPosition()
-      }, 100)
     } catch (error) {
       console.error("Failed to add subtask:", error)
     }
@@ -397,16 +363,9 @@ export function GanttChart({
   // サブタスクの削除
   const deleteSubTask = async (taskId: string, subTaskId: string) => {
     try {
-      saveScrollPosition() // スクロール位置を保存
-
       if (onDeleteSubTask) {
         await onDeleteSubTask(subTaskId)
       }
-
-      // 更新後にスクロール位置を復元
-      setTimeout(() => {
-        restoreScrollPosition()
-      }, 100)
     } catch (error) {
       console.error("Failed to delete subtask:", error)
     }
@@ -417,16 +376,9 @@ export function GanttChart({
     if (!newName.trim() || !onUpdateSubTask) return
 
     try {
-      saveScrollPosition() // スクロール位置を保存
-
       await onUpdateSubTask(subTaskId, { name: newName.trim() })
       setEditingSubTask(null)
       setEditSubTaskName("")
-
-      // 更新後にスクロール位置を復元
-      setTimeout(() => {
-        restoreScrollPosition()
-      }, 100)
     } catch (error) {
       console.error("Failed to update subtask name:", error)
     }
@@ -634,7 +586,7 @@ export function GanttChart({
 
   const dateColumnWidth = 40
   const totalTimelineWidth = dateRange.length * dateColumnWidth
-  const taskNameColumnWidth = 320 // 統一された幅を定義
+  const taskNameColumnWidth = 380 // 320から380に変更
 
   // 表示用のタスクリストを生成（サブタスクを含む）
   const getDisplayTasks = () => {
@@ -1103,8 +1055,46 @@ export function GanttChart({
                             </button>
                           )}
 
-                          <div className="flex-1 min-w-0">
+                          <div className="flex-1 min-w-0 flex items-center gap-2">
                             <h3 className={getTaskNameStyle(item.task.progress)}>{item.task.name}</h3>
+
+                            {/* 進捗率インジケーターを追加 */}
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                              {/* 進捗率バッジ */}
+                              <div
+                                className={`px-2 py-0.5 rounded-full text-xs font-bold transition-all duration-300 ${
+                                  item.task.progress === 100
+                                    ? "bg-teal-100 text-teal-700 border border-teal-300"
+                                    : item.task.progress >= 80
+                                      ? "bg-blue-100 text-blue-700 border border-blue-300"
+                                      : item.task.progress >= 50
+                                        ? "bg-yellow-100 text-yellow-700 border border-yellow-300"
+                                        : item.task.progress >= 20
+                                          ? "bg-orange-100 text-orange-700 border border-orange-300"
+                                          : "bg-red-100 text-red-700 border border-red-300"
+                                }`}
+                              >
+                                {item.task.progress}%
+                              </div>
+
+                              {/* ミニプログレスバー */}
+                              <div className="w-12 h-2 bg-gray-200 rounded-full overflow-hidden flex-shrink-0">
+                                <div
+                                  className={`h-full transition-all duration-500 ease-out ${
+                                    item.task.progress === 100
+                                      ? "bg-teal-500"
+                                      : item.task.progress >= 80
+                                        ? "bg-blue-500"
+                                        : item.task.progress >= 50
+                                          ? "bg-yellow-500"
+                                          : item.task.progress >= 20
+                                            ? "bg-orange-500"
+                                            : "bg-red-500"
+                                  }`}
+                                  style={{ width: `${item.task.progress}%` }}
+                                />
+                              </div>
+                            </div>
                           </div>
                         </div>
 
@@ -1127,7 +1117,7 @@ export function GanttChart({
                             <UserPlus className="h-3 w-3" />
                           </button>
 
-                          {/* タスク非表示ボタン - アイコンをEyeOffに変更 */}
+                          {/* タスク非表示ボタン */}
                           {!item.task.id.startsWith("sheet-") && (
                             <button
                               onClick={() => hideMainTask(item.task.id)}
