@@ -37,7 +37,7 @@ export function CommunicationGantt({ project, people, onBack }: CommunicationGan
     refetch: refetchSheet,
   } = useSheetTasks(project.openDate, people)
 
-  // データを統合
+  // データを統合する部分で明示的にソート
   useEffect(() => {
     console.log("🔄 CommunicationGantt: Combining tasks...")
     console.log("📊 Supabase tasks:", supabaseTasks)
@@ -50,12 +50,23 @@ export function CommunicationGantt({ project, people, onBack }: CommunicationGan
     const supabaseTaskNames = new Set(supabaseTasks.map((task) => task.name))
     const filteredSheetTasks = categorySheetTasks.filter((task) => !supabaseTaskNames.has(task.name))
 
-    const combined = [...filteredSheetTasks, ...supabaseTasks]
+    // 元の順序を保持：スプレッドシートタスクを先に、Supabaseタスクを後に配置
+    // orderIndexで明示的にソート
+    const combined = [...filteredSheetTasks, ...supabaseTasks].sort((a, b) => {
+      const orderA = a.orderIndex !== undefined ? a.orderIndex : 9999
+      const orderB = b.orderIndex !== undefined ? b.orderIndex : 9999
+      return orderA - orderB
+    })
 
     console.log(`✅ CommunicationGantt: Combined ${combined.length} tasks`)
     console.log(
-      "📋 Final task list:",
-      combined.map((t) => ({ name: t.name, id: t.id, subTaskCount: t.subTasks?.length || 0 })),
+      "📋 Final task list with order:",
+      combined.map((t) => ({
+        name: t.name,
+        id: t.id,
+        orderIndex: t.orderIndex,
+        subTaskCount: t.subTasks?.length || 0,
+      })),
     )
 
     setCombinedTasks(combined)

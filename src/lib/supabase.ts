@@ -76,6 +76,7 @@ export interface Database {
           assigned_person_id: string | null
           category: string
           is_local: boolean
+          order_index: number | null
           created_at: string
           updated_at: string
         }
@@ -89,6 +90,7 @@ export interface Database {
           assigned_person_id?: string | null
           category: string
           is_local?: boolean
+          order_index?: number | null
           created_at?: string
           updated_at?: string
         }
@@ -102,6 +104,7 @@ export interface Database {
           assigned_person_id?: string | null
           category?: string
           is_local?: boolean
+          order_index?: number | null
           updated_at?: string
         }
       }

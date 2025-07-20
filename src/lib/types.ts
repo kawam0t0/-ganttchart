@@ -15,6 +15,7 @@ export interface Project {
   openDate?: Date // 洗車場OPEN日を追加
 }
 
+// Task インターフェースに order_index を追加
 export interface Task {
   id: string
   name: string
@@ -23,6 +24,7 @@ export interface Task {
   progress: number
   assignedPerson?: Person
   subTasks?: SubTask[]
+  orderIndex?: number // 順序を管理するためのインデックスを追加
 }
 
 export interface SubTask {

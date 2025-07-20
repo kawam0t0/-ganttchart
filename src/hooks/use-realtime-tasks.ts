@@ -29,6 +29,7 @@ export function useRealtimeTasks(projectId: string | undefined, category: string
 
       if (tasksError) throw tasksError
 
+      // fetchTasks 関数でorderIndexを設定し、ソートを追加
       const formattedTasks: Task[] = tasksData.map((task) => {
         const assignedPerson = people.find((p) => p.id === task.assigned_person_id)
 
@@ -48,10 +49,12 @@ export function useRealtimeTasks(projectId: string | undefined, category: string
           progress: task.progress,
           assignedPerson,
           subTasks,
+          orderIndex: task.order_index || 9999, // デフォルト値を設定
         }
       })
 
-      setTasks(formattedTasks)
+      // orderIndexでソートしてからsetTasks
+      setTasks(formattedTasks.sort((a, b) => (a.orderIndex || 9999) - (b.orderIndex || 9999)))
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error")
     } finally {
@@ -60,6 +63,7 @@ export function useRealtimeTasks(projectId: string | undefined, category: string
   }
 
   // タスクを追加
+  // addTask 関数で新しいタスクにorderIndexを設定
   const addTask = async (taskData: {
     name: string
     startDate: Date
@@ -69,6 +73,19 @@ export function useRealtimeTasks(projectId: string | undefined, category: string
     if (!projectId) return
 
     try {
+      // 現在のタスク数を取得して次のorderIndexを決定
+      const { data: existingTasks, error: countError } = await supabase
+        .from("tasks")
+        .select("order_index")
+        .eq("project_id", projectId)
+        .eq("category", category)
+        .order("order_index", { ascending: false })
+        .limit(1)
+
+      if (countError) throw countError
+
+      const nextOrderIndex = existingTasks.length > 0 ? (existingTasks[0].order_index || 0) + 1 : 1000
+
       const { data, error } = await supabase
         .from("tasks")
         .insert([
@@ -81,6 +98,7 @@ export function useRealtimeTasks(projectId: string | undefined, category: string
             category,
             progress: 0,
             is_local: true,
+            order_index: nextOrderIndex, // orderIndexを設定
           },
         ])
         .select()
