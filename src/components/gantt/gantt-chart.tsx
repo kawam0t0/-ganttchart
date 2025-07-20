@@ -494,6 +494,7 @@ export function GanttChart({
       lightColor = "#fde047" // yellow-300
     } else if (progress >= 20) {
       // 20%以上: オレンジ
+      
       darkColor = "#f97316" // orange-500
       lightColor = "#fdba74" // orange-300
     } else {
