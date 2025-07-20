@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo } from "react"
-import { GanttChart } from "@/components/gantt/gantt-chart"
+import { GanttChart } from "../gantt-chart"
 import { useSheetTasks } from "@/hooks/use-sheet-tasks"
 import { useRealtimeTasks } from "@/hooks/use-realtime-tasks"
 import type { Person } from "@/lib/types"

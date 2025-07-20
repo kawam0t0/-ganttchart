@@ -8,7 +8,7 @@ export function useSheetTasks(
   openDate: Date | undefined,
   people: Person[],
   category: string,
-  existingTaskNames: Set<string>, // Set<string>に変更
+  existingTaskNames: Set<string>,
 ) {
   const [tasks, setTasks] = useState<Task[]>([])
   const [loading, setLoading] = useState(true)
