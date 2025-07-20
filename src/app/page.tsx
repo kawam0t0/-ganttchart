@@ -326,6 +326,8 @@ export default function ProjectManagementApp() {
   const [editingPerson, setEditingPerson] = useState<Person | null>(null)
   const [newPersonForm, setNewPersonForm] = useState({ firstName: "", lastName: "" })
   const [newProjectName, setNewProjectName] = useState("")
+  const [isDeletePersonOpen, setIsDeletePersonOpen] = useState(false)
+  const [personToDelete, setPersonToDelete] = useState<Person | null>(null)
 
   // Supabaseリアルタイムフックを使用
   const {
@@ -413,6 +415,23 @@ export default function ProjectManagementApp() {
   const openDeleteProject = (project: Project) => {
     setProjectToDelete(project)
     setIsDeleteProjectOpen(true)
+  }
+
+  const handleDeletePerson = async () => {
+    if (personToDelete) {
+      try {
+        await deletePerson(personToDelete.id)
+        setPersonToDelete(null)
+        setIsDeletePersonOpen(false)
+      } catch (error) {
+        console.error("Failed to delete person:", error)
+      }
+    }
+  }
+
+  const openDeletePerson = (person: Person) => {
+    setPersonToDelete(person)
+    setIsDeletePersonOpen(true)
   }
 
   return (
@@ -671,18 +690,6 @@ export default function ProjectManagementApp() {
                               姓 <span className="text-red-500">*</span>
                             </Label>
                             <Input
-                              id="editFirstName"
-                              value={newPersonForm.firstName}
-                              onChange={(e) => setNewPersonForm({ ...newPersonForm, firstName: e.target.value })}
-                              placeholder="田中"
-                              className="h-12 text-base border-2 border-gray-200 focus:border-blue-500 rounded-xl"
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <Label htmlFor="editLastName" className="text-sm font-medium text-gray-700">
-                              名 <span className="text-red-500">*</span>
-                            </Label>
-                            <Input
                               id="editLastName"
                               value={newPersonForm.lastName}
                               onChange={(e) => setNewPersonForm({ ...newPersonForm, lastName: e.target.value })}
@@ -756,18 +763,30 @@ export default function ProjectManagementApp() {
                       <h2 className="text-lg font-medium bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent mb-4 inline-block">
                         登録済み担当者
                       </h2>
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="grid grid-cols-1 gap-3">
                         {people.map((person, index) => (
                           <div
                             key={person.id}
-                            className="flex items-center gap-3 p-2 bg-white/30 backdrop-blur-sm rounded-lg transition-all duration-200 hover:bg-white/50"
+                            className="flex items-center justify-between p-3 bg-white/30 backdrop-blur-sm rounded-lg transition-all duration-200 hover:bg-white/50"
                           >
-                            <div className={`w-8 h-8 rounded-full ${person.bgColor} flex items-center justify-center`}>
-                              <User className="h-4 w-4 text-white" />
+                            <div className="flex items-center gap-3">
+                              <div
+                                className={`w-8 h-8 rounded-full ${person.bgColor} flex items-center justify-center`}
+                              >
+                                <User className="h-4 w-4 text-white" />
+                              </div>
+                              <span className={`text-sm font-medium ${person.textColor}`}>
+                                {person.firstName} {person.lastName}
+                              </span>
                             </div>
-                            <span className={`text-sm font-medium ${person.textColor}`}>
-                              {person.firstName} {person.lastName}
-                            </span>
+                            <Button
+                              onClick={() => openDeletePerson(person)}
+                              variant="ghost"
+                              size="sm"
+                              className="text-red-600 hover:text-red-700 hover:bg-red-50 p-1 h-8 w-8"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
                           </div>
                         ))}
                       </div>
@@ -901,6 +920,51 @@ export default function ProjectManagementApp() {
                       </Button>
                       <Button
                         onClick={handleDeleteProject}
+                        className="px-6 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl"
+                      >
+                        <Trash2 className="w-4 h-4 mr-2" />
+                        削除
+                      </Button>
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
+
+              {/* Delete Person Dialog */}
+              <Dialog open={isDeletePersonOpen} onOpenChange={setIsDeletePersonOpen}>
+                <DialogContent className="sm:max-w-lg bg-white/95 backdrop-blur-md border-0 shadow-2xl">
+                  <DialogHeader className="pb-6">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center">
+                        <Trash2 className="h-6 w-6 text-red-600" />
+                      </div>
+                      <div>
+                        <DialogTitle className="text-xl font-semibold text-gray-900">担当者を削除</DialogTitle>
+                        <p className="text-sm text-gray-500 mt-1">この操作は取り消せません</p>
+                      </div>
+                    </div>
+                  </DialogHeader>
+                  <div className="space-y-6">
+                    {personToDelete && (
+                      <div className="bg-red-50 p-4 rounded-xl">
+                        <p className="text-sm text-red-700">
+                          <span className="font-medium">
+                            「{personToDelete.firstName} {personToDelete.lastName}」
+                          </span>
+                          を削除しようとしています。 この担当者に割り当てられているタスクは未割り当てになります。
+                        </p>
+                      </div>
+                    )}
+                    <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
+                      <Button
+                        variant="outline"
+                        onClick={() => setIsDeletePersonOpen(false)}
+                        className="px-6 py-2 border-gray-300 text-gray-700 hover:bg-gray-50 rounded-xl"
+                      >
+                        キャンセル
+                      </Button>
+                      <Button
+                        onClick={handleDeletePerson}
                         className="px-6 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl"
                       >
                         <Trash2 className="w-4 h-4 mr-2" />
