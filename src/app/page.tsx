@@ -226,8 +226,6 @@ function ProjectDetailView({ project, onBack, onUpdateProject, people }: Project
                   <h3 className="text-lg font-semibold text-yellow-800">OPEN日の設定が必要です</h3>
                 </div>
                 <p className="text-yellow-700 mb-4">
-                  洗車場のOPEN予定日を設定すると、各カテゴリーのガントチャートにアクセスできるようになります。
-                  OPEN日から逆算してタスクのスケジュールが自動的に計算されます。
                 </p>
                 <div className="flex justify-center">
                   <Button
@@ -235,7 +233,7 @@ function ProjectDetailView({ project, onBack, onUpdateProject, people }: Project
                     className="bg-yellow-600 hover:bg-yellow-700 text-white px-6 py-2 rounded-xl"
                   >
                     <Flag className="w-4 h-4 mr-2" />
-                    今すぐOPEN日を設定
+                    OPEN日設定
                   </Button>
                 </div>
               </div>
