@@ -133,6 +133,9 @@ export function useRealtimeTasks(projectId: string | undefined, category: string
       if (updates.assignedPerson !== undefined) {
         updateData.assigned_person_id = updates.assignedPerson?.id || null
       }
+      // 日付更新を追加
+      if (updates.startDate) updateData.start_date = updates.startDate.toISOString()
+      if (updates.endDate) updateData.end_date = updates.endDate.toISOString()
 
       const { error } = await supabase.from("tasks").update(updateData).eq("id", taskId)
 
