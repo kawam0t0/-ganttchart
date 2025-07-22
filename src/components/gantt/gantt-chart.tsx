@@ -181,6 +181,22 @@ export function GanttChart({
       try {
         console.log("Converting sheet task to Supabase:", task.name)
 
+        // 日付の安全チェック
+        if (!task.startDate || !task.endDate) {
+          console.error("Task has invalid dates:", task.id, task.startDate, task.endDate)
+          return null
+        }
+
+        // Date オブジェクトに確実に変換
+        const startDate = task.startDate instanceof Date ? task.startDate : new Date(task.startDate)
+        const endDate = task.endDate instanceof Date ? task.endDate : new Date(task.endDate)
+
+        // 変換後の日付が有効かチェック
+        if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+          console.error("Failed to convert task dates:", task.id, task.startDate, task.endDate)
+          return null
+        }
+
         // 進捗率を計算
         const completedCount = task.subTasks?.filter((st) => st.completed).length || 0
         const progress = task.subTasks?.length ? Math.round((completedCount / task.subTasks.length) * 100) : 0
@@ -188,8 +204,8 @@ export function GanttChart({
         // スプレッドシートタスクをSupabaseタスクとして新規作成
         const newTask = await onAddTask({
           name: task.name,
-          startDate: task.startDate,
-          endDate: task.endDate,
+          startDate: startDate,
+          endDate: endDate,
           assignedPersonId: task.assignedPerson?.id,
           orderIndex: task.orderIndex,
           progress: progress,
@@ -214,7 +230,16 @@ export function GanttChart({
 
           // ローカル状態を更新（古いタスクを削除し、新しいタスクを追加）
           setTasks((prevTasks) =>
-            prevTasks.map((t) => (t.id === task.id ? { ...newTask, subTasks: task.subTasks } : t)),
+            prevTasks.map((t) =>
+              t.id === task.id
+                ? {
+                    ...newTask,
+                    startDate: startDate,
+                    endDate: endDate,
+                    subTasks: task.subTasks,
+                  }
+                : t,
+            ),
           )
 
           console.log("Successfully converted sheet task to Supabase:", newTask.id)
@@ -674,10 +699,24 @@ export function GanttChart({
 
   const getTaskPosition = (task: Task) => {
     const totalDays = dateRange.length
+
+    // 日付が無効な場合の安全チェック
+    if (!task.startDate || !task.endDate || !(task.startDate instanceof Date) || !(task.endDate instanceof Date)) {
+      console.warn("Invalid task dates:", task.id, task.startDate, task.endDate)
+      return { left: "0%", width: "0%" }
+    }
+
+    // 日付が無効な値の場合の追加チェック
+    if (isNaN(task.startDate.getTime()) || isNaN(task.endDate.getTime())) {
+      console.warn("Invalid date values:", task.id, task.startDate, task.endDate)
+      return { left: "0%", width: "0%" }
+    }
+
     const taskStartIndex = dateRange.findIndex((date) => date.toDateString() === task.startDate.toDateString())
     const taskEndIndex = dateRange.findIndex((date) => date.toDateString() === task.endDate.toDateString())
 
     if (taskStartIndex === -1 || taskEndIndex === -1) {
+      console.warn("Task dates outside of date range:", task.id, task.startDate, task.endDate)
       return { left: "0%", width: "0%" }
     }
 
@@ -794,6 +833,18 @@ export function GanttChart({
 
     // タスクを元の順序のまま追加（ソートしない）
     tasks.forEach((task) => {
+      // 無効なタスクをスキップ
+      if (!task || !task.id || !task.name) {
+        console.warn("Invalid task detected, skipping:", task)
+        return
+      }
+
+      // 日付が無効なタスクをスキップ
+      if (!task.startDate || !task.endDate) {
+        console.warn("Task with invalid dates detected, skipping:", task.id, task.name)
+        return
+      }
+
       displayTasks.push({ type: "main", task })
 
       if (expandedTasks.has(task.id)) {
@@ -914,7 +965,7 @@ export function GanttChart({
                         <Settings className="h-6 w-6 text-orange-600" />
                       </div>
                       <div>
-                        <DialogTitle className="text-xl font-semibold text-gray-900">非���示タスク管理</DialogTitle>
+                        <DialogTitle className="text-xl font-semibold text-gray-900">非表示タスク管理</DialogTitle>
                         <p className="text-sm text-gray-500 mt-1">非表示にしたタスクを再表示できます</p>
                       </div>
                     </div>
