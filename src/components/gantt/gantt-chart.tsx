@@ -51,9 +51,6 @@ function GanttHeader() {
   )
 }
 
-// Footer Component for Gantt Chart
-function GanttFooter() {}
-
 interface GanttChartProps {
   project: { id: string; name: string; openDate?: Date }
   category: string
@@ -141,7 +138,7 @@ export function GanttChart({
   const monthHeaderScrollRef = useRef<HTMLDivElement>(null)
   const dateHeaderScrollRef = useRef<HTMLDivElement>(null)
   const contentScrollRef = useRef<HTMLDivElement>(null)
-  const taskNameScrollRef = useRef<HTMLDivElement>(null) // タスク名エリアのスクロール参照を追加
+  const taskNameScrollRef = useRef<HTMLDivElement>(null)
 
   // OPEN日から4ヶ月前を開始日として設定
   const openDate = project.openDate || new Date(2024, 3, 1)
@@ -158,20 +155,79 @@ export function GanttChart({
   }
 
   // ドラッグ機能のヘルパー関数
-  const getDateFromPosition = (x: number, containerElement: HTMLElement): Date => {
-    const rect = containerElement.getBoundingClientRect()
-    const relativeX = x - rect.left
-    const totalWidth = rect.width
-    const dayIndex = Math.floor((relativeX / totalWidth) * dateRange.length)
-    const clampedIndex = Math.max(0, Math.min(dayIndex, dateRange.length - 1))
-    return new Date(dateRange[clampedIndex])
-  }
+  const getDateFromPosition = useCallback(
+    (x: number, containerElement: HTMLElement): Date => {
+      const rect = containerElement.getBoundingClientRect()
+      const relativeX = Math.max(0, x - rect.left)
+      const totalWidth = rect.width
+      const dayIndex = Math.floor((relativeX / totalWidth) * dateRange.length)
+      const clampedIndex = Math.max(0, Math.min(dayIndex, dateRange.length - 1))
+      return new Date(dateRange[clampedIndex])
+    },
+    [dateRange],
+  )
 
-  const addDays = (date: Date, days: number): Date => {
+  const addDays = useCallback((date: Date, days: number): Date => {
     const result = new Date(date)
     result.setDate(result.getDate() + days)
     return result
-  }
+  }, [])
+
+  // スプレッドシートタスクをSupabaseタスクに変換する関数
+  const convertSheetTaskToSupabase = useCallback(
+    async (task: Task): Promise<string | null> => {
+      if (!task.id.startsWith("sheet-") || !onAddTask) return task.id
+
+      try {
+        console.log("Converting sheet task to Supabase:", task.name)
+
+        // 進捗率を計算
+        const completedCount = task.subTasks?.filter((st) => st.completed).length || 0
+        const progress = task.subTasks?.length ? Math.round((completedCount / task.subTasks.length) * 100) : 0
+
+        // スプレッドシートタスクをSupabaseタスクとして新規作成
+        const newTask = await onAddTask({
+          name: task.name,
+          startDate: task.startDate,
+          endDate: task.endDate,
+          assignedPersonId: task.assignedPerson?.id,
+          orderIndex: task.orderIndex,
+          progress: progress,
+          is_local: false,
+        })
+
+        if (newTask && newTask.id) {
+          // サブタスクを移行
+          if (task.subTasks && onAddSubTask) {
+            for (const subTask of task.subTasks) {
+              const createdSubTask = await onAddSubTask(newTask.id, subTask.name)
+              if (createdSubTask && subTask.completed && onUpdateSubTask) {
+                await onUpdateSubTask(createdSubTask.id, { completed: true })
+              }
+            }
+          }
+
+          // 進捗率を更新
+          if (onUpdateTask) {
+            await onUpdateTask(newTask.id, { progress })
+          }
+
+          // ローカル状態を更新（古いタスクを削除し、新しいタスクを追加）
+          setTasks((prevTasks) =>
+            prevTasks.map((t) => (t.id === task.id ? { ...newTask, subTasks: task.subTasks } : t)),
+          )
+
+          console.log("Successfully converted sheet task to Supabase:", newTask.id)
+          return newTask.id
+        }
+      } catch (error) {
+        console.error("Failed to convert sheet task to Supabase:", error)
+      }
+
+      return null
+    },
+    [onAddTask, onAddSubTask, onUpdateSubTask, onUpdateTask],
+  )
 
   // ドラッグ開始
   const handleMouseDown = (e: React.MouseEvent, taskId: string, dragType: "start" | "end" | "move") => {
@@ -180,6 +236,8 @@ export function GanttChart({
 
     const task = tasks.find((t) => t.id === taskId)
     if (!task) return
+
+    console.log("Starting drag for task:", taskId, "type:", dragType)
 
     setDragState({
       isDragging: true,
@@ -246,20 +304,50 @@ export function GanttChart({
           : null,
       )
     },
-    [dragState],
+    [dragState, getDateFromPosition, addDays],
   )
 
   // ドラッグ終了
   const handleMouseUp = useCallback(async () => {
     if (!dragState?.isDragging) return
 
+    console.log("Ending drag for task:", dragState.taskId)
+
     try {
+      const task = tasks.find((t) => t.id === dragState.taskId)
+      if (!task) {
+        console.error("Task not found:", dragState.taskId)
+        return
+      }
+
+      let actualTaskId = dragState.taskId
+
+      // スプレッドシートタスクの場合は、まずSupabaseに変換
+      if (dragState.taskId.startsWith("sheet-")) {
+        console.log("Converting sheet task before updating dates")
+        const convertedTaskId = await convertSheetTaskToSupabase(task)
+        if (convertedTaskId) {
+          actualTaskId = convertedTaskId
+        } else {
+          throw new Error("Failed to convert sheet task to Supabase")
+        }
+      }
+
       // データベースを更新
       if (onUpdateTask) {
-        await onUpdateTask(dragState.taskId, {
+        console.log("Updating task dates:", actualTaskId, {
           startDate: dragState.currentStartDate,
           endDate: dragState.currentEndDate,
         })
+
+        await onUpdateTask(actualTaskId, {
+          startDate: dragState.currentStartDate,
+          endDate: dragState.currentEndDate,
+        })
+
+        console.log("Successfully updated task dates")
+      } else {
+        console.warn("onUpdateTask function not available")
       }
     } catch (error) {
       console.error("Failed to update task dates:", error)
@@ -276,7 +364,7 @@ export function GanttChart({
     // ドラッグ状態をリセット
     setDragState(null)
     document.body.style.cursor = "default"
-  }, [dragState, onUpdateTask])
+  }, [dragState, onUpdateTask, tasks, convertSheetTaskToSupabase])
 
   // マウスイベントリスナーの設定
   useEffect(() => {
@@ -313,37 +401,10 @@ export function GanttChart({
       // スプレッドシートタスクの場合は、まずSupabaseに保存してから更新
       if (taskId.startsWith("sheet-")) {
         const originalTask = tasks.find((t) => t.id === taskId)
-        if (originalTask && onAddTask) {
-          // 進捗率を計算
-          const completedCount = originalTask.subTasks?.filter((st) => st.completed).length || 0
-          const progress = originalTask.subTasks?.length
-            ? Math.round((completedCount / originalTask.subTasks.length) * 100)
-            : 0
-
-          // スプレッドシートタスクをSupabaseタスクとして新規作成
-          const newTask = await onAddTask({
-            name: originalTask.name,
-            startDate: originalTask.startDate,
-            endDate: originalTask.endDate,
-            assignedPersonId: personId,
-            orderIndex: originalTask.orderIndex, // Pass the original orderIndex
-            progress: progress,
-            is_local: false, // Mark as a converted sheet task
-          })
-
-          // サブタスクを移行
-          if (newTask && originalTask.subTasks && onAddSubTask) {
-            for (const subTask of originalTask.subTasks) {
-              const createdSubTask = await onAddSubTask(newTask.id, subTask.name)
-              if (createdSubTask && subTask.completed && onUpdateSubTask) {
-                await onUpdateSubTask(createdSubTask.id, { completed: true })
-              }
-            }
-          }
-
-          // 進捗率を更新
-          if (newTask && onUpdateTask) {
-            await onUpdateTask(newTask.id, { progress })
+        if (originalTask) {
+          const convertedTaskId = await convertSheetTaskToSupabase(originalTask)
+          if (convertedTaskId && onUpdateTask && selectedPerson) {
+            await onUpdateTask(convertedTaskId, { assignedPerson: selectedPerson })
           }
         }
       } else if (onUpdateTask && selectedPerson) {
@@ -420,39 +481,28 @@ export function GanttChart({
       // スプレッドシートタスクの場合は、まずSupabaseに保存してからサブタスクを更新
       if (taskId.startsWith("sheet-")) {
         const originalTask = tasks.find((t) => t.id === taskId)
-        if (originalTask && onAddTask) {
-          // サブタスクの状態を更新
-          const updatedSubTasks =
-            originalTask.subTasks?.map((st) => (st.id === subTaskId ? { ...st, completed: !st.completed } : st)) || []
+        if (originalTask) {
+          const convertedTaskId = await convertSheetTaskToSupabase(originalTask)
+          if (convertedTaskId) {
+            // 変換後のタスクでサブタスクを更新
+            const task = tasks.find((t) => t.id === convertedTaskId)
+            const subTask = task?.subTasks?.find((st) => st.id === subTaskId)
 
-          // 進捗率を計算
-          const completedCount = updatedSubTasks.filter((st) => st.completed).length
-          const progress = updatedSubTasks.length > 0 ? Math.round((completedCount / updatedSubTasks.length) * 100) : 0
+            if (subTask && onUpdateSubTask) {
+              await onUpdateSubTask(subTaskId, { completed: !subTask.completed })
 
-          // 新しいSupabaseタスクを作成
-          const newTask = await onAddTask({
-            name: originalTask.name,
-            startDate: originalTask.startDate,
-            endDate: originalTask.endDate,
-            assignedPersonId: originalTask.assignedPerson?.id,
-            orderIndex: originalTask.orderIndex, // Pass the original orderIndex
-            progress: progress, // Pass the calculated progress
-            is_local: false, // Mark as a converted sheet task
-          })
+              // 進捗率を再計算して更新
+              if (task && onUpdateTask) {
+                const updatedSubTasks =
+                  task.subTasks?.map((st) => (st.id === subTaskId ? { ...st, completed: !st.completed } : st)) || []
 
-          // 新しく作成されたタスクにサブタスクを追加
-          if (newTask && onAddSubTask) {
-            for (const subTask of updatedSubTasks) {
-              const createdSubTask = await onAddSubTask(newTask.id, subTask.name)
-              if (createdSubTask && subTask.completed && onUpdateSubTask) {
-                await onUpdateSubTask(createdSubTask.id, { completed: true })
+                const completedCount = updatedSubTasks.filter((st) => st.completed).length
+                const progress =
+                  updatedSubTasks.length > 0 ? Math.round((completedCount / updatedSubTasks.length) * 100) : 0
+
+                await onUpdateTask(convertedTaskId, { progress })
               }
             }
-          }
-
-          // 進捗率を更新
-          if (newTask && onUpdateTask) {
-            await onUpdateTask(newTask.id, { progress })
           }
         }
       } else {
@@ -486,7 +536,19 @@ export function GanttChart({
     if (!newSubTaskName.trim() || !onAddSubTask) return
 
     try {
-      await onAddSubTask(taskId, newSubTaskName.trim())
+      // スプレッドシートタスクの場合は、まずSupabaseに変換
+      let actualTaskId = taskId
+      if (taskId.startsWith("sheet-")) {
+        const originalTask = tasks.find((t) => t.id === taskId)
+        if (originalTask) {
+          const convertedTaskId = await convertSheetTaskToSupabase(originalTask)
+          if (convertedTaskId) {
+            actualTaskId = convertedTaskId
+          }
+        }
+      }
+
+      await onAddSubTask(actualTaskId, newSubTaskName.trim())
       setNewSubTaskName("")
     } catch (error) {
       console.error("Failed to add subtask:", error)
@@ -719,7 +781,7 @@ export function GanttChart({
 
   const dateColumnWidth = 40
   const totalTimelineWidth = dateRange.length * dateColumnWidth
-  const taskNameColumnWidth = 380 // 320から380に変更
+  const taskNameColumnWidth = 380
 
   // 表示用のタスクリストを生成（サブタスクを含む）
   const getDisplayTasks = () => {
@@ -852,7 +914,7 @@ export function GanttChart({
                         <Settings className="h-6 w-6 text-orange-600" />
                       </div>
                       <div>
-                        <DialogTitle className="text-xl font-semibold text-gray-900">非表示タスク管理</DialogTitle>
+                        <DialogTitle className="text-xl font-semibold text-gray-900">非���示タスク管理</DialogTitle>
                         <p className="text-sm text-gray-500 mt-1">非表示にしたタスクを再表示できます</p>
                       </div>
                     </div>
@@ -1039,7 +1101,7 @@ export function GanttChart({
             </div>
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-              <span>バーをドラッグで期間調整・クリックで展開</span>
+              <span>全タスクドラッグ対応・クリックで展開</span>
             </div>
           </div>
         </div>
@@ -1415,7 +1477,7 @@ export function GanttChart({
                       {/* Task Bar Container */}
                       <div className="relative w-full h-full flex items-center">
                         {item.type === "main" && (
-                          /* Main Task Bar with Drag Handles */
+                          /* Main Task Bar with Drag Handles - 全タスク対応 */
                           <div
                             className="absolute group transition-all duration-200 rounded-full border border-gray-200 shadow-sm hover:shadow-md"
                             style={{
@@ -1425,25 +1487,25 @@ export function GanttChart({
                               bottom: "2px",
                               height: "auto",
                             }}
-                            title={`${item.task.name} (${item.task.progress}%完了) - ドラッグで期間調整、クリックでサブタスク表示`}
+                            title={`${item.task.name} (${item.task.progress}%完了) - 全タスクドラッグ対応、クリックでサブタスク表示`}
                           >
-                            {/* Left Resize Handle */}
+                            {/* Left Resize Handle - 全タスクで有効 */}
                             <div
-                              className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize bg-blue-500 opacity-0 group-hover:opacity-70 transition-opacity rounded-l-full flex items-center justify-center"
+                              className="absolute left-0 top-0 bottom-0 w-3 cursor-ew-resize bg-blue-500 opacity-0 group-hover:opacity-80 transition-opacity rounded-l-full flex items-center justify-center z-10"
                               onMouseDown={(e) => handleMouseDown(e, item.task.id, "start")}
-                              title="開始日を調整"
+                              title="開始日を調整（全タスク対応）"
                             >
                               <div className="w-1 h-4 bg-white rounded-full"></div>
                             </div>
 
-                            {/* Main Bar Area (for moving) */}
+                            {/* Main Bar Area (for moving) - 全タスクで有効 */}
                             <div
                               className="absolute inset-0 cursor-grab active:cursor-grabbing flex items-center justify-center text-xs font-bold text-white drop-shadow-sm"
                               onMouseDown={(e) => {
-                                // 左右の端から10px以内の場合はmoveハンドラーを無効化
+                                // 左右の端から12px以内の場合はmoveハンドラーを無効化
                                 const rect = e.currentTarget.getBoundingClientRect()
                                 const relativeX = e.clientX - rect.left
-                                if (relativeX > 10 && relativeX < rect.width - 10) {
+                                if (relativeX > 12 && relativeX < rect.width - 12) {
                                   handleMouseDown(e, item.task.id, "move")
                                 }
                               }}
@@ -1455,11 +1517,11 @@ export function GanttChart({
                               {item.task.progress}%
                             </div>
 
-                            {/* Right Resize Handle */}
+                            {/* Right Resize Handle - 全タスクで有効 */}
                             <div
-                              className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize bg-blue-500 opacity-0 group-hover:opacity-70 transition-opacity rounded-r-full flex items-center justify-center"
+                              className="absolute right-0 top-0 bottom-0 w-3 cursor-ew-resize bg-blue-500 opacity-0 group-hover:opacity-80 transition-opacity rounded-r-full flex items-center justify-center z-10"
                               onMouseDown={(e) => handleMouseDown(e, item.task.id, "end")}
-                              title="終了日を調整"
+                              title="終了日を調整（全タスク対応）"
                             >
                               <div className="w-1 h-4 bg-white rounded-full"></div>
                             </div>
