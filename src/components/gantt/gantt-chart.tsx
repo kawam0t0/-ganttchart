@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -109,6 +109,18 @@ export function GanttChart({
   const [assigningTaskId, setAssigningTaskId] = useState<string | null>(null)
   const [isAssignDialogOpen, setIsAssignDialogOpen] = useState(false)
 
+  // ドラッグ機能用の状態管理
+  const [dragState, setDragState] = useState<{
+    isDragging: boolean
+    taskId: string
+    dragType: "start" | "end" | "move"
+    startX: number
+    originalStartDate: Date
+    originalEndDate: Date
+    currentStartDate: Date
+    currentEndDate: Date
+  } | null>(null)
+
   // initialTasksが変更されたときにローカルのtasks状態を更新
   useEffect(() => {
     setTasks(initialTasks)
@@ -131,12 +143,6 @@ export function GanttChart({
   const contentScrollRef = useRef<HTMLDivElement>(null)
   const taskNameScrollRef = useRef<HTMLDivElement>(null) // タスク名エリアのスクロール参照を追加
 
-  // スクロール位置を保存するための参照
-  // const scrollPositionRef = useRef({
-  //   horizontal: 0,
-  //   vertical: 0,
-  // })
-
   // OPEN日から4ヶ月前を開始日として設定
   const openDate = project.openDate || new Date(2024, 3, 1)
   const startDate = new Date(openDate)
@@ -151,32 +157,145 @@ export function GanttChart({
     dateRange.push(new Date(d))
   }
 
-  // スクロール位置を保存する関数
-  // const saveScrollPosition = () => {
-  //   if (contentScrollRef.current && taskNameScrollRef.current) {
-  //     scrollPositionRef.current = {
-  //       horizontal: contentScrollRef.current.scrollLeft,
-  //       vertical: taskNameScrollRef.current.scrollTop,
-  //     }
-  //   }
-  // }
+  // ドラッグ機能のヘルパー関数
+  const getDateFromPosition = (x: number, containerElement: HTMLElement): Date => {
+    const rect = containerElement.getBoundingClientRect()
+    const relativeX = x - rect.left
+    const totalWidth = rect.width
+    const dayIndex = Math.floor((relativeX / totalWidth) * dateRange.length)
+    const clampedIndex = Math.max(0, Math.min(dayIndex, dateRange.length - 1))
+    return new Date(dateRange[clampedIndex])
+  }
 
-  // スクロール位置を復元する関数
-  // const restoreScrollPosition = () => {
-  //   requestAnimationFrame(() => {
-  //     if (contentScrollRef.current && taskNameScrollRef.current) {
-  //       contentScrollRef.current.scrollLeft = scrollPositionRef.current.horizontal
-  //       taskNameScrollRef.current.scrollTop = scrollPositionRef.current.vertical
+  const addDays = (date: Date, days: number): Date => {
+    const result = new Date(date)
+    result.setDate(result.getDate() + days)
+    return result
+  }
 
-  //       // 他のスクロール要素も同期
-  //       syncScrolls(scrollPositionRef.current.horizontal)
-  //     }
-  //   })
-  // }
+  // ドラッグ開始
+  const handleMouseDown = (e: React.MouseEvent, taskId: string, dragType: "start" | "end" | "move") => {
+    e.preventDefault()
+    e.stopPropagation()
+
+    const task = tasks.find((t) => t.id === taskId)
+    if (!task) return
+
+    setDragState({
+      isDragging: true,
+      taskId,
+      dragType,
+      startX: e.clientX,
+      originalStartDate: new Date(task.startDate),
+      originalEndDate: new Date(task.endDate),
+      currentStartDate: new Date(task.startDate),
+      currentEndDate: new Date(task.endDate),
+    })
+
+    // カーソルスタイルを設定
+    document.body.style.cursor = dragType === "move" ? "grabbing" : "ew-resize"
+  }
+
+  // ドラッグ中
+  const handleMouseMove = useCallback(
+    (e: MouseEvent) => {
+      if (!dragState?.isDragging || !contentScrollRef.current) return
+
+      const containerElement = contentScrollRef.current.firstElementChild as HTMLElement
+      if (!containerElement) return
+
+      const newDate = getDateFromPosition(e.clientX, containerElement)
+      let newStartDate = new Date(dragState.originalStartDate)
+      let newEndDate = new Date(dragState.originalEndDate)
+
+      if (dragState.dragType === "start") {
+        // 開始日を変更（終了日は固定）
+        newStartDate = newDate
+        if (newStartDate >= dragState.originalEndDate) {
+          newStartDate = addDays(dragState.originalEndDate, -1)
+        }
+      } else if (dragState.dragType === "end") {
+        // 終了日を変更（開始日は固定）
+        newEndDate = newDate
+        if (newEndDate <= dragState.originalStartDate) {
+          newEndDate = addDays(dragState.originalStartDate, 1)
+        }
+      } else if (dragState.dragType === "move") {
+        // 期間を維持したまま移動
+        const originalDuration = Math.ceil(
+          (dragState.originalEndDate.getTime() - dragState.originalStartDate.getTime()) / (1000 * 60 * 60 * 24),
+        )
+        newStartDate = newDate
+        newEndDate = addDays(newStartDate, originalDuration)
+      }
+
+      // ローカル状態を更新（リアルタイムプレビュー）
+      setTasks((prevTasks) =>
+        prevTasks.map((task) =>
+          task.id === dragState.taskId ? { ...task, startDate: newStartDate, endDate: newEndDate } : task,
+        ),
+      )
+
+      setDragState((prev) =>
+        prev
+          ? {
+              ...prev,
+              currentStartDate: newStartDate,
+              currentEndDate: newEndDate,
+            }
+          : null,
+      )
+    },
+    [dragState],
+  )
+
+  // ドラッグ終了
+  const handleMouseUp = useCallback(async () => {
+    if (!dragState?.isDragging) return
+
+    try {
+      // データベースを更新
+      if (onUpdateTask) {
+        await onUpdateTask(dragState.taskId, {
+          startDate: dragState.currentStartDate,
+          endDate: dragState.currentEndDate,
+        })
+      }
+    } catch (error) {
+      console.error("Failed to update task dates:", error)
+      // エラーの場合は元の状態に戻す
+      setTasks((prevTasks) =>
+        prevTasks.map((task) =>
+          task.id === dragState.taskId
+            ? { ...task, startDate: dragState.originalStartDate, endDate: dragState.originalEndDate }
+            : task,
+        ),
+      )
+    }
+
+    // ドラッグ状態をリセット
+    setDragState(null)
+    document.body.style.cursor = "default"
+  }, [dragState, onUpdateTask])
+
+  // マウスイベントリスナーの設定
+  useEffect(() => {
+    if (dragState?.isDragging) {
+      document.addEventListener("mousemove", handleMouseMove)
+      document.addEventListener("mouseup", handleMouseUp)
+
+      return () => {
+        document.removeEventListener("mousemove", handleMouseMove)
+        document.removeEventListener("mouseup", handleMouseUp)
+      }
+    }
+  }, [dragState, handleMouseMove, handleMouseUp])
 
   // タスクバーのクリックハンドラー
   const handleTaskBarClick = (taskId: string) => {
-    // saveScrollPosition() // スクロール位置を保存
+    // ドラッグ中はクリックを無視
+    if (dragState?.isDragging) return
+
     const newExpandedTasks = new Set(expandedTasks)
     if (expandedTasks.has(taskId)) {
       newExpandedTasks.delete(taskId)
@@ -920,7 +1039,7 @@ export function GanttChart({
             </div>
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-              <span>バーをクリックで展開・右クリックで編集</span>
+              <span>バーをドラッグで期間調整・クリックで展開</span>
             </div>
           </div>
         </div>
@@ -1296,9 +1415,9 @@ export function GanttChart({
                       {/* Task Bar Container */}
                       <div className="relative w-full h-full flex items-center">
                         {item.type === "main" && (
-                          /* Main Task Bar */
+                          /* Main Task Bar with Drag Handles */
                           <div
-                            className="absolute cursor-pointer transition-all duration-200 rounded-full border border-gray-200 shadow-sm hover:shadow-md"
+                            className="absolute group transition-all duration-200 rounded-full border border-gray-200 shadow-sm hover:shadow-md"
                             style={{
                               ...getTaskPosition(item.task),
                               ...getProgressBarStyle(item.task.progress),
@@ -1306,12 +1425,43 @@ export function GanttChart({
                               bottom: "2px",
                               height: "auto",
                             }}
-                            onClick={() => handleTaskBarClick(item.task.id)}
-                            title={`${item.task.name} (${item.task.progress}%完了) - クリックでサブタスク表示`}
+                            title={`${item.task.name} (${item.task.progress}%完了) - ドラッグで期間調整、クリックでサブタスク表示`}
                           >
-                            {/* Progress Percentage Label */}
-                            <div className="absolute inset-0 flex items-center justify-center text-xs font-bold text-white drop-shadow-sm">
+                            {/* Left Resize Handle */}
+                            <div
+                              className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize bg-blue-500 opacity-0 group-hover:opacity-70 transition-opacity rounded-l-full flex items-center justify-center"
+                              onMouseDown={(e) => handleMouseDown(e, item.task.id, "start")}
+                              title="開始日を調整"
+                            >
+                              <div className="w-1 h-4 bg-white rounded-full"></div>
+                            </div>
+
+                            {/* Main Bar Area (for moving) */}
+                            <div
+                              className="absolute inset-0 cursor-grab active:cursor-grabbing flex items-center justify-center text-xs font-bold text-white drop-shadow-sm"
+                              onMouseDown={(e) => {
+                                // 左右の端から10px以内の場合はmoveハンドラーを無効化
+                                const rect = e.currentTarget.getBoundingClientRect()
+                                const relativeX = e.clientX - rect.left
+                                if (relativeX > 10 && relativeX < rect.width - 10) {
+                                  handleMouseDown(e, item.task.id, "move")
+                                }
+                              }}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleTaskBarClick(item.task.id)
+                              }}
+                            >
                               {item.task.progress}%
+                            </div>
+
+                            {/* Right Resize Handle */}
+                            <div
+                              className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize bg-blue-500 opacity-0 group-hover:opacity-70 transition-opacity rounded-r-full flex items-center justify-center"
+                              onMouseDown={(e) => handleMouseDown(e, item.task.id, "end")}
+                              title="終了日を調整"
+                            >
+                              <div className="w-1 h-4 bg-white rounded-full"></div>
                             </div>
                           </div>
                         )}
