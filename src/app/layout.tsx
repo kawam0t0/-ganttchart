@@ -6,7 +6,7 @@ import "./globals.css"
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "Spchart - プロジェクト管理システム",
+  title: "Spchart",
   description: "シンプルで美しいプロジェクト管理とガントチャートアプリケーション",
 }
 
