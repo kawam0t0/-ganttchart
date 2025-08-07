@@ -239,9 +239,9 @@ function ProjectDetailView({ project, onBack, onUpdateProject, people }: Project
             )}
           </div>
 
-          {/* Categories Grid - 2行3列のレイアウトに変更 */}
+          {/* Categories Grid - 2行3列の均等なレイアウトに変更 */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
-            {categories.slice(0, 5).map((category, index) => (
+            {categories.map((category, index) => (
               <Card
                 key={category}
                 className={`h-32 backdrop-blur-md border-blue-200/50 transition-all duration-500 rounded-2xl group ${
@@ -273,39 +273,6 @@ function ProjectDetailView({ project, onBack, onUpdateProject, people }: Project
                 </CardContent>
               </Card>
             ))}
-
-            {/* その他 - Full width */}
-            <div className="md:col-span-3 flex justify-center">
-              <Card
-                className={`h-32 w-80 backdrop-blur-md border-blue-200/50 transition-all duration-500 rounded-2xl group ${
-                  project.openDate
-                    ? "bg-white/70 hover:bg-white/90 hover:border-blue-300/70 hover:scale-105 cursor-pointer shadow-lg hover:shadow-2xl"
-                    : "bg-gray-100/50 border-gray-300/50 cursor-not-allowed opacity-60"
-                } animate-fade-in-up`}
-                style={{ animationDelay: `500ms` }}
-                onClick={() => project.openDate && setSelectedCategory("その他")}
-              >
-                <CardContent className="flex flex-col items-center justify-center h-full p-6 relative">
-                  {!project.openDate && (
-                    <div className="absolute top-2 right-2">
-                      <div className="w-4 h-4 bg-red-500 rounded-full flex items-center justify-center">
-                        <span className="text-white text-xs font-bold">!</span>
-                      </div>
-                    </div>
-                  )}
-                  <h3
-                    className={`text-lg font-semibold text-center transition-colors duration-300 ${
-                      project.openDate ? "text-blue-700 group-hover:text-blue-800" : "text-gray-500"
-                    }`}
-                  >
-                    その他
-                  </h3>
-                  {!project.openDate && (
-                    <p className="text-xs text-red-500 mt-1 text-center">OPEN日を設定してください</p>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
           </div>
         </div>
       </div>
