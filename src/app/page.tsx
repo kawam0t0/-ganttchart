@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Plus, Users, Edit3, User, FolderPlus, Trash2, Flag, Settings, BarChart3 } from "lucide-react"
+import { Plus, Users, Edit3, User, FolderPlus, Trash2, Flag, Settings, BarChart3 } from 'lucide-react'
 import type { Person, Project } from "@/lib/types"
 
 // Supabaseリアルタイムフックをインポート
@@ -18,8 +18,7 @@ import { CommunicationGantt } from "@/components/gantt/categories/communication"
 import { PromotionGantt } from "@/components/gantt/categories/promotion"
 import { NetworkGantt } from "@/components/gantt/categories/network"
 import { MarketingGantt } from "@/components/gantt/categories/marketing"
-import { RecruitmentGantt } from "@/components/gantt/categories/recruitment"
-import { TrainingGantt } from "@/components/gantt/categories/training"
+import { HrGantt } from "@/components/gantt/categories/hr"
 import { OthersGantt } from "@/components/gantt/categories/others"
 
 // Header Component
@@ -71,7 +70,7 @@ function ProjectDetailView({ project, onBack, onUpdateProject, people }: Project
     project.openDate ? project.openDate.toISOString().split("T")[0] : "",
   )
 
-  const categories = ["連絡系", "販促物備品系", "通信系", "プロモーション系", "求人系", "研修系", "その他"]
+  const categories = ["連絡系", "販促物備品系", "通信系", "プロモーション系", "人事系", "その他"]
 
   const handleUpdateOpenDate = () => {
     if (openDateInput) {
@@ -101,10 +100,8 @@ function ProjectDetailView({ project, onBack, onUpdateProject, people }: Project
         return <NetworkGantt {...commonProps} />
       case "プロモーション系":
         return <MarketingGantt {...commonProps} />
-      case "求人系":
-        return <RecruitmentGantt {...commonProps} />
-      case "研修系":
-        return <TrainingGantt {...commonProps} />
+      case "人事系":
+        return <HrGantt {...commonProps} />
       case "その他":
         return <OthersGantt {...commonProps} />
       default:
@@ -226,6 +223,8 @@ function ProjectDetailView({ project, onBack, onUpdateProject, people }: Project
                   <h3 className="text-lg font-semibold text-yellow-800">OPEN日の設定が必要です</h3>
                 </div>
                 <p className="text-yellow-700 mb-4">
+                  洗車場のOPEN予定日を設定すると、各カテゴリーのガントチャートにアクセスできるようになります。
+                  OPEN日から逆算してタスクのスケジュールが自動的に計算されます。
                 </p>
                 <div className="flex justify-center">
                   <Button
@@ -233,16 +232,16 @@ function ProjectDetailView({ project, onBack, onUpdateProject, people }: Project
                     className="bg-yellow-600 hover:bg-yellow-700 text-white px-6 py-2 rounded-xl"
                   >
                     <Flag className="w-4 h-4 mr-2" />
-                    OPEN日設定
+                    今すぐOPEN日を設定
                   </Button>
                 </div>
               </div>
             )}
           </div>
 
-          {/* Categories Grid */}
+          {/* Categories Grid - 2行3列のレイアウトに変更 */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
-            {categories.slice(0, 6).map((category, index) => (
+            {categories.slice(0, 5).map((category, index) => (
               <Card
                 key={category}
                 className={`h-32 backdrop-blur-md border-blue-200/50 transition-all duration-500 rounded-2xl group ${
@@ -283,7 +282,7 @@ function ProjectDetailView({ project, onBack, onUpdateProject, people }: Project
                     ? "bg-white/70 hover:bg-white/90 hover:border-blue-300/70 hover:scale-105 cursor-pointer shadow-lg hover:shadow-2xl"
                     : "bg-gray-100/50 border-gray-300/50 cursor-not-allowed opacity-60"
                 } animate-fade-in-up`}
-                style={{ animationDelay: `600ms` }}
+                style={{ animationDelay: `500ms` }}
                 onClick={() => project.openDate && setSelectedCategory("その他")}
               >
                 <CardContent className="flex flex-col items-center justify-center h-full p-6 relative">
